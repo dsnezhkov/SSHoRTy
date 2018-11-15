@@ -1,10 +1,5 @@
 /*
 
-src: https://gist.github.com/codref/473351a24a3ef90162cf10857fac0ff3
-	 https://gist.github.com/pavel-odintsov/0208f1848952d4940b4a5976165db17f
-	 https://github.com/creack/termios/blob/master/win/win.go
-	 https://github.com/davecheney/socksie
-	 https://sosedoff.com/2015/05/25/ssh-port-forwarding-with-go.html
 */
 
 package main
