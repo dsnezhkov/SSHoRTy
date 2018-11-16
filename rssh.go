@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -17,6 +18,7 @@ import (
 
 func main() {
 
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	resp, err := http.Get(serverUserKeyUrl)
 	if err != nil {
 		fmt.Println("Key Server not accessible")

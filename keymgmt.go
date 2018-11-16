@@ -5,13 +5,9 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
-	"io/ioutil"
-	"log"
-
-	"golang.org/x/crypto/ssh"
 )
 
+/*
 func publicKeyFile(file string) ssh.AuthMethod {
 	buffer, err := ioutil.ReadFile(file)
 	if err != nil {
@@ -25,7 +21,7 @@ func publicKeyFile(file string) ssh.AuthMethod {
 		return nil
 	}
 	return ssh.PublicKeys(key)
-}
+}*/
 
 func decrypt(data []byte, passphrase string) []byte {
 	key := []byte(createHash(passphrase))

@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"github.com/kr/pty"
+	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
 	"net"
+	"os"
 	"os/exec"
 	"sync"
-	"golang.org/x/crypto/ssh"
+	"syscall"
 )
 
 func listenConnection(client net.Conn, config *ssh.ServerConfig) {
@@ -21,8 +23,9 @@ func listenConnection(client net.Conn, config *ssh.ServerConfig) {
 
 	log.Printf("New SSH connection from %s (%s)", sshConn.RemoteAddr(), sshConn.ClientVersion())
 
-	// Discard all global out-of-band Requests
-	go ssh.DiscardRequests(reqs)
+	// Discard all irrelevant incoming request but serve the one you really need to care.
+	// go ssh.DiscardRequests(reqs)
+	go handleRequests(reqs)
 	// Accept all channels
 	go handleChannels(chans)
 
@@ -65,9 +68,153 @@ func acceptSLoop(listener net.Listener) {
 	log.Println("shutting down")
 }
 
+func handleRequests(reqs <-chan *ssh.Request) {
+	for req := range reqs {
+		log.Printf("recieved out-of-band request: %+v", req)
+	}
+}
+
+// Start assigns a pseudo-terminal tty os.File to c.Stdin, c.Stdout,
+// and c.Stderr, calls c.Start, and returns the File of the tty's
+// corresponding pty.
+func PtyRun(c *exec.Cmd, tty *os.File) (err error) {
+	defer tty.Close()
+	c.Stdout = tty
+	c.Stdin = tty
+	c.Stderr = tty
+	c.SysProcAttr = &syscall.SysProcAttr{
+		Setctty: true,
+		Setsid:  true,
+	}
+	return c.Start()
+}
+
 func handleChannels(chans <-chan ssh.NewChannel) {
+	// Service the incoming Channel channel.
+	for newChannel := range chans {
+		// Channels have a type, depending on the application level
+		// protocol intended. In the case of a shell, the type is
+		// "session" and ServerShell may be used to present a simple
+		// terminal interface.
+		if t := newChannel.ChannelType(); t != "session" {
+			newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", t))
+			continue
+		}
+		channel, requests, err := newChannel.Accept()
+		if err != nil {
+			log.Printf("could not accept channel (%s)", err)
+			continue
+		}
+
+		// allocate a terminal for this channel
+		log.Print("creating pty...")
+		// Create new pty
+		f, tty, err := pty.Open()
+		if err != nil {
+			log.Printf("could not start pty (%s)", err)
+			continue
+		}
+
+		var shell string
+		shell = os.Getenv("SHELL")
+		if shell == "" {
+			shell = "bash"
+		}
+
+		// Sessions have out-of-band requests such as "shell", "pty-req" and "env"
+		go func(in <-chan *ssh.Request) {
+			for req := range in {
+				log.Printf("%v %s", req.Payload, req.Payload)
+				ok := false
+				switch req.Type {
+				case "exec":
+					ok = true
+					command := string(req.Payload[4 : req.Payload[3]+4])
+					cmd := exec.Command(shell, []string{"-c", command}...)
+
+					cmd.Stdout = channel
+					cmd.Stderr = channel
+					cmd.Stdin = channel
+
+					err := cmd.Start()
+					if err != nil {
+						log.Printf("could not start command (%s)", err)
+						continue
+					}
+
+					// teardown session
+					go func() {
+						_, err := cmd.Process.Wait()
+						if err != nil {
+							log.Printf("failed to exit bash (%s)", err)
+						}
+						channel.Close()
+						log.Printf("session closed")
+					}()
+				case "shell":
+					cmd := exec.Command(shell)
+					cmd.Env = []string{"TERM=xterm"}
+					err := PtyRun(cmd, tty)
+					if err != nil {
+						log.Printf("%s", err)
+					}
+
+					// Teardown session
+					var once sync.Once
+					closeCh := func() {
+						channel.Close()
+						log.Printf("session closed")
+					}
+
+					// Pipe session to bash and visa-versa
+					go func() {
+						io.Copy(channel, f)
+						once.Do(closeCh)
+					}()
+
+					go func() {
+						io.Copy(f, channel)
+						once.Do(closeCh)
+					}()
+
+					// We don't accept any commands (Payload),
+					// only the default shell.
+					if len(req.Payload) == 0 {
+						ok = true
+					}
+				case "pty-req":
+					// Responding 'ok' here will let the client
+					// know we have a pty ready for input
+					ok = true
+					// Parse body...
+					termLen := req.Payload[3]
+					termEnv := string(req.Payload[4 : termLen+4])
+					w, h := parseDims(req.Payload[termLen+4:])
+					SetWinsize(f.Fd(), w, h)
+					log.Printf("pty-req '%s'", termEnv)
+				case "window-change":
+					w, h := parseDims(req.Payload)
+					SetWinsize(f.Fd(), w, h)
+					continue //no response
+				}
+
+				if !ok {
+					log.Printf("declining %s request...", req.Type)
+				}
+
+				req.Reply(ok, nil)
+			}
+		}(requests)
+	}
+}
+
+// =======================
+
+
+/*func handleChannels(chans <-chan ssh.NewChannel) {
 	// Service the incoming Channel channel in go routine
 	for newChannel := range chans {
+		// We need to accept requests from current channel, and serve them in separate goroutines so the connection won’t be blocked.
 		go handleChannel(newChannel)
 	}
 }
@@ -91,55 +238,37 @@ func handleChannel(newChannel ssh.NewChannel) {
 		return
 	}
 
-	// Fire up bash for this session
-	bash := exec.Command("bash")
-
-	// Prepare teardown function
-	closeConn := func() {
-		connection.Close()
-		_, err := bash.Process.Wait()
-		if err != nil {
-			log.Printf("Failed to exit bash (%s)", err)
-		}
-		log.Printf("Session closed")
-	}
-
-	// Allocate a terminal for this channel
-	log.Print("Creating pty...")
-	bashf, err := pty.Start(bash)
-	if err != nil {
-		log.Printf("Could not start pty (%s)", err)
-		closeConn()
-		return
-	}
-
-	//pipe session to bash and visa-versa
-	var once sync.Once
-	go func() {
-		io.Copy(connection, bashf)
-		once.Do(closeConn)
-	}()
-	go func() {
-		io.Copy(bashf, connection)
-		once.Do(closeConn)
-	}()
 
 	// Sessions have out-of-band requests such as "shell", "pty-req" and "env"
 	go func() {
 		for req := range requests {
+
+			bashf := os.File{}
+			log.Printf("Req type: %s payload %s", req.Type, req.Payload)
 			switch req.Type {
+			case "exec":
+				cmdName := strings.Trim(string(req.Payload), "'()")
+				log.Printf("Command %s", cmdName)
 			case "shell":
+				bashf = launchInteractive(connection)
 				// We only accept the default shell
 				// (i.e. no command in the Payload)
 				if len(req.Payload) == 0 {
 					req.Reply(true, nil)
 				}
 			case "pty-req":
-				termLen := req.Payload[3]
-				w, h := parseDims(req.Payload[termLen+4:])
-				SetWinsize(bashf.Fd(), w, h)
-				// Responding true (OK) here will let the client
-				// know we have a pty ready for input
+				if (os.File{}) != bashf {
+					termLen := req.Payload[3]
+					w, h := parseDims(req.Payload[termLen+4:])
+					SetWinsize(bashf.Fd(), w, h)
+					// Responding true (OK) here will let the client
+					// know we have a pty ready for input
+				}else{
+					bashf = launchInteractive(connection)
+					termLen := req.Payload[3]
+					w, h := parseDims(req.Payload[termLen+4:])
+					SetWinsize(bashf.Fd(), w, h)
+				}
 				req.Reply(true, nil)
 			case "window-change":
 				w, h := parseDims(req.Payload)
@@ -148,7 +277,7 @@ func handleChannel(newChannel ssh.NewChannel) {
 		}
 	}()
 }
-
+*/
 // =======================
 
 
@@ -177,7 +306,53 @@ func transfer(in, out net.Conn) {
 	out.Close()
 }
 
-func handleClient(client net.Conn, remote net.Conn) {
+/*
+func launchInteractive(connection ssh.Channel)  (ptmx os.File) {
+
+	// Fire up bash for this session
+	bash := exec.Command("bash")
+
+	// Prepare teardown function
+	closeConn := func() {
+		connection.Close()
+		_, err := bash.Process.Wait()
+		if err != nil {
+			log.Printf("Failed to exit bash (%s)", err)
+		}
+		log.Printf("Session closed")
+	}
+
+	// Allocate a terminal for this channel
+	log.Print("Creating ppty...")
+	bashf, err := pty.Start(bash)
+	if err != nil {
+		log.Printf("Could not start pty (%s)", err)
+		closeConn()
+		return
+	}
+
+	//pipe session to bash and visa-versa
+	var once sync.Once
+	go func() {
+		_, err := io.Copy(connection, bashf)
+		if err != nil {
+			log.Println(fmt.Sprintf("error while copy bash -> remote : %s", err))
+		}
+		once.Do(closeConn)
+	}()
+	go func() {
+		_, err := io.Copy(bashf, connection)
+		if err != nil {
+			log.Println(fmt.Sprintf("error while copy remote -> bash: %s", err))
+		}
+		once.Do(closeConn)
+	}()
+
+	return *bashf
+}
+
+*/
+/*func handleClient(client net.Conn, remote net.Conn) {
 	defer client.Close()
 	chDone := make(chan bool)
 
@@ -200,4 +375,4 @@ func handleClient(client net.Conn, remote net.Conn) {
 	}()
 
 	<-chDone
-}
+}*/

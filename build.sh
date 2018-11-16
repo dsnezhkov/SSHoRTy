@@ -29,7 +29,7 @@ go build -ldflags \
      -X main.remoteSocksHost=${remoteSocksHost} \
      -X main.remoteSocksPort=${remoteSocksPort}" \
      -o ${dropperName} ./rssh.go \
-     ./types.go ./vars.go ./pty.go ./socksport.go ./keymgmt.go ./traffic.go
+     ./types.go ./vars.go ./Pty.go ./socksport.go ./keymgmt.go ./traffic.go
 
 if [[ $? -eq 0 ]]
 then

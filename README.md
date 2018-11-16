@@ -72,3 +72,4 @@ Thanks to ref:
 -	 https://github.com/creack/termios/blob/master/win/win.go
 -	 https://github.com/davecheney/socksie
 -	 https://sosedoff.com/2015/05/25/ssh-port-forwarding-with-go.html
+- https://raw.githubusercontent.com/Scalingo/go-ssh-examples/master/server_complex.go
