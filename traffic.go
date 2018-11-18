@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/kr/pty"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -130,7 +132,12 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 				case "exec":
 					ok = true
 					command := string(req.Payload[4 : req.Payload[3]+4])
+
+
+					// Start Command via shell
+					// TODO: maybe without shell?
 					cmd := exec.Command(shell, []string{"-c", command}...)
+					log.Printf("cmd to exec: %s\n", command )
 
 					cmd.Stdout = channel
 					cmd.Stderr = channel
@@ -142,7 +149,7 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 						continue
 					}
 
-					// teardown session
+					// Teardown session
 					go func() {
 						_, err := cmd.Process.Wait()
 						if err != nil {
@@ -152,6 +159,7 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 						log.Printf("session closed")
 					}()
 				case "shell":
+					// TODO: parameterize shell and TERM
 					cmd := exec.Command(shell)
 					cmd.Env = []string{"TERM=xterm"}
 					err := PtyRun(cmd, tty)
@@ -166,14 +174,19 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 						log.Printf("session closed")
 					}
 
-					// Pipe session to bash and visa-versa
+					//pipe session to bash and visa-versa
 					go func() {
-						io.Copy(channel, f)
+						_, err := io.Copy(channel, f)
+						if err != nil {
+							log.Println(fmt.Sprintf("error copy bash -> remote : %s", err))
+						}
 						once.Do(closeCh)
 					}()
-
 					go func() {
-						io.Copy(f, channel)
+						_, err := io.Copy(f, channel)
+						if err != nil {
+							log.Println(fmt.Sprintf("error copy remote -> bash: %s", err))
+						}
 						once.Do(closeCh)
 					}()
 
@@ -196,6 +209,34 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 					w, h := parseDims(req.Payload)
 					SetWinsize(f.Fd(), w, h)
 					continue //no response
+				case "subsystem":
+					log.Printf("Subsystem: %s\n", req.Payload[4:])
+					subsystemId :=string(req.Payload[4:])
+					if subsystemId == "sftp" {
+
+						debugStream := ioutil.Discard
+						serverOptions := []sftp.ServerOption{
+							sftp.WithDebug(debugStream),
+						}
+
+						server, err := sftp.NewServer(
+							channel,
+							serverOptions...,
+						)
+						if err != nil {
+							log.Fatal(err)
+						}
+						if err := server.Serve(); err == io.EOF {
+							server.Close()
+							log.Print("sftp client exited session.")
+						} else if err != nil {
+							log.Fatal("sftp server completed with error:", err)
+						}
+
+						ok = true
+					}else{
+						log.Printf("Declining Subsystem: %s\n", subsystemId)
+					}
 				}
 
 				if !ok {
@@ -352,27 +393,3 @@ func launchInteractive(connection ssh.Channel)  (ptmx os.File) {
 }
 
 */
-/*func handleClient(client net.Conn, remote net.Conn) {
-	defer client.Close()
-	chDone := make(chan bool)
-
-	// Start remote -> local data transfer
-	go func() {
-		_, err := io.Copy(client, remote)
-		if err != nil {
-			log.Println(fmt.Sprintf("error while copy remote->local: %s", err))
-		}
-		chDone <- true
-	}()
-
-	// Start local -> remote data transfer
-	go func() {
-		_, err := io.Copy(remote, client)
-		if err != nil {
-			log.Println(fmt.Sprintf("error while copy local->remote: %s", err))
-		}
-		chDone <- true
-	}()
-
-	<-chDone
-}*/
