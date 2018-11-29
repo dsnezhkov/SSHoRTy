@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var LivePrefixState struct {
@@ -20,13 +20,11 @@ var LivePrefixState struct {
 	IsEnable   bool
 }
 var commands = map[string]string{
-	"#help": "Help",
+	"#help":   "Help",
 	"#config": "Show configuration",
-	"#shell": "Interactive host shell",
-	"#quit": "To exit prompter",
+	"#shell":  "Interactive host shell",
+	"#quit":   "To exit prompter",
 }
-
-
 
 func main() {
 	server := "192.168.88.15"
@@ -34,9 +32,6 @@ func main() {
 	server = server + ":" + port
 	user := "tester"
 	p := "Drg4r1c3"
-
-
-
 
 	config := &ssh.ClientConfig{
 		User: user,
@@ -69,7 +64,7 @@ func main() {
 		matchedACmd, _ := regexp.MatchString("#.*", pin)
 		matchedHCmd, _ := regexp.MatchString("!.*", pin)
 
-		if ! (matchedACmd || matchedHCmd){
+		if !(matchedACmd || matchedHCmd) {
 
 			fmt.Println("type `#help` for help")
 		}
@@ -108,7 +103,7 @@ func main() {
 
 }
 
-func execInSession(hcmd string, conn *ssh.Client, shell bool){
+func execInSession(hcmd string, conn *ssh.Client, shell bool) {
 
 	session, err := conn.NewSession()
 	if err != nil {
@@ -124,11 +119,10 @@ func execInSession(hcmd string, conn *ssh.Client, shell bool){
 	// stdin, _ := session.StdinPipe()
 	//stdout, _ := session.StdoutPipe()
 
-
 	var modes ssh.TerminalModes
 	modes = ssh.TerminalModes{
-		ssh.ECHO:          1,    // please print what I type
-		ssh.ECHOCTL:       0,    // please don't print control chars
+		ssh.ECHO:          1,     // please print what I type
+		ssh.ECHOCTL:       0,     // please don't print control chars
 		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
 		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
@@ -146,7 +140,7 @@ func execInSession(hcmd string, conn *ssh.Client, shell bool){
 			case syscall.SIGINT:
 				fmt.Print("SIGINT")
 			default:
-				fmt.Printf("%v",sig )
+				fmt.Printf("%v", sig)
 			}
 		}()
 	}
@@ -165,7 +159,6 @@ func execInSession(hcmd string, conn *ssh.Client, shell bool){
 		}
 	}
 
-
 	if shell {
 
 		session.Setenv("LS_COLORS", os.Getenv("LS_COLORS"))
@@ -180,21 +173,17 @@ func execInSession(hcmd string, conn *ssh.Client, shell bool){
 		// monitor for sigwinch
 		go monWinCh(session, termFD)
 
-
 		if err := session.Wait(); err != nil {
 			log.Fatalf("Remote command did not exit cleanly: %v", err)
 		}
 
-
-	}else{
+	} else {
 		if err = session.Run(hcmd); err != nil {
 			fmt.Fprintf(os.Stdout, "%v\n", err)
 		}
 	}
 
-
 }
-
 
 func monWinCh(session *ssh.Session, fd int) {
 	sigs := make(chan os.Signal, 1)
@@ -217,19 +206,18 @@ func monWinCh(session *ssh.Session, fd int) {
 			Width:  uint32(width),
 			Height: uint32(height),
 		}
+		// why not func (s *Session) WindowChange(h, w int) error {
 		session.SendRequest("window-change", false, ssh.Marshal(message))
 	}
 }
 
-
-
-func helpCmd(){
+func helpCmd() {
 
 	fmt.Printf("Agent commands start with `#`. Ex: #config\n")
 	fmt.Printf("Host commands start with `!`. Ex: !ls\n")
 	fmt.Printf("WARNING: Host commands do not support signals. If you need full shell. execute #shell\n")
 	fmt.Print("\nAgent commands:\n")
-	for key, value := range commands{
+	for key, value := range commands {
 		fmt.Printf("\t%-20s - %s\n", key, value)
 	}
 }
@@ -246,10 +234,8 @@ func changeLivePrefix() (string, bool) {
 func completer(t prompt.Document) []prompt.Suggest {
 	var s = []prompt.Suggest{}
 
-	for key, value := range commands{
-		s = append(s, prompt.Suggest{key,value})
+	for key, value := range commands {
+		s = append(s, prompt.Suggest{key, value})
 	}
 	return prompt.FilterHasPrefix(s, t.GetWordBeforeCursor(), true)
 }
-
-
