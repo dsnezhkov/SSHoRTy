@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/gorilla/websocket"
+)
 
 // Types
 type Endpoint struct {
@@ -10,4 +13,9 @@ type Endpoint struct {
 
 func (endpoint *Endpoint) String() string {
 	return fmt.Sprintf("%s:%s", endpoint.Host, endpoint.Port)
+}
+
+type wsConn struct {
+	*websocket.Conn
+	buff []byte
 }
