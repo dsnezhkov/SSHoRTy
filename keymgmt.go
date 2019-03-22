@@ -23,8 +23,10 @@ func publicKeyFile(file string) ssh.AuthMethod {
 	return ssh.PublicKeys(key)
 }*/
 
-func decrypt(data []byte, passphrase string) []byte {
-	key := []byte(createHash(passphrase))
+// Decrypts an AES blob by applying a hash of a passphrase,
+// Returns decrypted array of bytes
+func KeyDecrypt(data []byte, passphrase string) []byte {
+	key := []byte(KeyCreateHash(passphrase))
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		panic(err.Error())
@@ -42,8 +44,8 @@ func decrypt(data []byte, passphrase string) []byte {
 	return plaintext
 }
 
-
-func createHash(key string) string {
+// Derives a key from a passphrase string
+func KeyCreateHash(key string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(key))
 	return hex.EncodeToString(hasher.Sum(nil))

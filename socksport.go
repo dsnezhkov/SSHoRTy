@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"net"
+	"io"
 	"log"
+	"net"
+	"sync"
 )
 
 func handleSConn(local net.Conn) {
@@ -25,6 +27,7 @@ func handleSConn(local net.Conn) {
 	buf = buf[:n]
 
 	// check SOCKS version
+	// Note: Only implements v4
 	switch version := buf[0]; version {
 	case 4:
 		switch command := buf[1]; command {
@@ -142,4 +145,29 @@ func handleSConn(local net.Conn) {
 	default:
 		log.Printf("[%s] unknown SOCKS version: %d", local.RemoteAddr(), version)
 	}
+}
+
+// in - local SOCKS conn, out - remote desired endpoint
+func transfer(in, out net.Conn) {
+	wg := new(sync.WaitGroup)
+	wg.Add(2)
+	f := func(in, out net.Conn, wg *sync.WaitGroup) {
+
+		// copy bytes verbatim
+		n, err := io.Copy(out, in)
+		log.Printf("xfer done: in=%v\tout=%v\ttransfered=%d\terr=%v", in.RemoteAddr(), out.RemoteAddr(), n, err)
+		// close write side on local SOCKS
+		if conn, ok := in.(*net.TCPConn); ok {
+			conn.CloseWrite()
+		}
+		// close read side to remote endpoint
+		if conn, ok := out.(*net.TCPConn); ok {
+			conn.CloseRead()
+		}
+		wg.Done()
+	}
+	go f(in, out, wg)
+	f(out, in, wg)
+	wg.Wait()
+	out.Close()
 }

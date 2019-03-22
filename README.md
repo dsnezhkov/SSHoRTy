@@ -65,6 +65,12 @@ Build Dropper
        SOCKS from Attacker C2 SOCKS proxy: 127.0.0.1:1080 
        point your browser to it and/or proxifier. Note: no DNS masking yet.
 ```
+
+## V2:
+```bash
+./websockify.py --ssl-only  --cert=/Users/dimas/Code/go/src/sshpipe/websocketd/sslcert.pem --key=/Users/dimas/Code/go/src/sshpipe/websocketd/sslkey.pem 8080 172.16.56.230:22
+``` 
+ 
 ## Code used
 Thanks to ref: 
 - https://gist.github.com/codref/473351a24a3ef90162cf10857fac0ff3
@@ -73,3 +79,4 @@ Thanks to ref:
 -	 https://github.com/davecheney/socksie
 -	 https://sosedoff.com/2015/05/25/ssh-port-forwarding-with-go.html
 - https://raw.githubusercontent.com/Scalingo/go-ssh-examples/master/server_complex.go
+

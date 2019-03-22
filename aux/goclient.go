@@ -27,7 +27,7 @@ var commands = map[string]string{
 }
 
 func main() {
-	server := "192.168.88.15"
+	server := "172.16.56.230"
 	port := "22"
 	server = server + ":" + port
 	user := "tester"

