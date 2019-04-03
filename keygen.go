@@ -9,9 +9,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
-	"encoding/base64"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io"
@@ -21,9 +21,9 @@ import (
 )
 
 func main() {
-	savePrivateFileTo := "./keys/id_rsa_test"
-	savePrivateEncFileTo := "./keys/id_rsa_test_enc"
-	savePublicFileTo := "./keys/id_rsa_test.pub"
+	savePrivateFileTo := "./keys/agentx.sshkey_kg"
+	savePrivateEncFileTo := "./keys/agentx.sshkey_kg_enc"
+	savePublicFileTo := "./keys/agentx.sshkey_kg.pub"
 	bitSize := 4096
 
 	privateKey, err := generatePrivateKey(bitSize)
@@ -50,19 +50,21 @@ func main() {
 
 	ciphertext := encrypt([]byte(privateKeyBytes), "password")
 	fmt.Printf("Encrypted: %x\n", ciphertext)
+
 	plaintext := decrypt(ciphertext, "password")
 	fmt.Printf("Decrypted: %s\n", plaintext)
-	encryptFile(savePrivateEncFileTo, []byte(privateKeyBytes), "password1")
-	fmt.Println(string(decryptFile(savePrivateEncFileTo, "password1")))
+
+	encryptFile(savePrivateEncFileTo, []byte(privateKeyBytes), "password")
+	fmt.Println(string(decryptFile(savePrivateEncFileTo, "password")))
 
 	encoded := base64.StdEncoding.EncodeToString([]byte(ciphertext))
-	fmt.Println("Base64 encoded ciphertext (B64): " , encoded)
+	fmt.Println("Base64 encoded ciphertext (B64): ", encoded)
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		fmt.Println("Base64 decode error:", err)
 		return
 	}
-	fmt.Println("Base64 decoded ciphertext (hex): " , hex.EncodeToString(decoded));
+	fmt.Println("Base64 decoded ciphertext (hex): ", hex.EncodeToString(decoded))
 }
 
 // generatePrivateKey creates a RSA Private Key of specified byte size
@@ -175,5 +177,3 @@ func decryptFile(filename string, passphrase string) []byte {
 	data, _ := ioutil.ReadFile(filename)
 	return decrypt(data, passphrase)
 }
-
-

@@ -28,6 +28,9 @@ var (
 	HTTPProxy    string // HTTP Proxy
 	HTTPEndpoint string // HTTP Endpoint
 	WSEndpoint   string // WS/S Endpoint
+
+	LogFile    string
+	Daemonize  string
 )
 
 // local service to be forwarded

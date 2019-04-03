@@ -43,29 +43,29 @@ func listenSConnection(SClientConn net.Conn) {
 }
 
 func acceptLoop(listener net.Listener, config *ssh.ServerConfig) {
-	fmt.Printf("Listener: %s\n", listener.Addr().String())
+	log.Printf("Listener: %s\n", listener.Addr().String())
 	defer listener.Close()
 	for {
 		clientConn, err := listener.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("New connection found on %s\n", listener.Addr().String())
+		log.Printf("New connection found on %s\n", listener.Addr().String())
 		go listenConnection(clientConn, config)
 	}
 }
 
 func acceptSLoop(listener net.Listener) {
 
-	fmt.Printf("Listener: %s\n", listener.Addr().String())
+	log.Printf("Listener: %s\n", listener.Addr().String())
 	defer listener.Close()
 	for {
 		clientConn, err := listener.Accept()
-		fmt.Printf("local addr %s\n", clientConn.LocalAddr())
+		log.Printf("local addr %s\n", clientConn.LocalAddr())
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("New connection found on %s\n", listener.Addr().String())
+		log.Printf("New connection found on %s\n", listener.Addr().String())
 
 		go listenSConnection(clientConn)
 	}
@@ -132,7 +132,7 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 		// Sessions have out-of-band requests such as "exec", "shell", "pty-req" and "env"
 		go func(in <-chan *ssh.Request) {
 			for req := range in {
-				log.Printf("%v %s", req.Payload, req.Payload)
+				// log.Printf("%v %s", req.Payload, req.Payload)
 				ok := false
 				switch req.Type {
 				case "exec":

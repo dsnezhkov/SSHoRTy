@@ -14,15 +14,138 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"os/exec"
+	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/crypto/ssh"
 )
 
+var PIDFile = "/tmp/shrt.pid"
+
 func main() {
+
+	if len(os.Args) != 2 {
+		fmt.Printf("Can also do: %s [start|stop] but OK... \n ", os.Args[0])
+	}
+
+	if LogFile != ""  {
+		flog, err := os.OpenFile(LogFile,
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Println(err)
+		}
+		defer flog.Close()
+
+		log.SetOutput(flog)
+	}
+
+
+	if Daemonize == "true" {
+
+		if len(os.Args) == 1 || strings.ToLower(os.Args[1]) == "start" {
+
+			// check if daemon already running.
+			if _, err := os.Stat(PIDFile); err == nil {
+				log.Println("Already running or pid file exist.")
+				os.Exit(1)
+			}
+
+			cmd := exec.Command(os.Args[0], "run")
+			cmd.Start()
+			log.Printf("Daemon process %s, PID %d\n", os.Args[0], cmd.Process.Pid)
+
+			savePID(cmd.Process.Pid)
+			time.Sleep(1)
+			os.Exit(0)
+
+		}
+
+		if strings.ToLower(os.Args[1]) == "run" {
+
+			// Make arrangement to remove PID file upon receiving the SIGTERM from kill command
+			ch := make(chan os.Signal, 1)
+			signal.Notify(ch, os.Interrupt, os.Kill, syscall.SIGTERM)
+
+			go func() {
+				signalType := <-ch
+				signal.Stop(ch)
+				log.Println("Exit command received. Exiting...")
+
+				// this is a good place to flush everything to disk
+				// before terminating.
+				log.Println("Received signal type : ", signalType)
+
+				// remove PID file
+				os.Remove(PIDFile)
+				os.Exit(0)
+
+			}()
+
+			doit()
+		}
+
+		// upon receiving the stop command
+		// read the Process ID stored in PIDfile
+		// kill the process using the Process ID
+		// and exit. If Process ID does not exist, prompt error and quit
+
+		if strings.ToLower(os.Args[1]) == "stop" {
+			if _, err := os.Stat(PIDFile); err == nil {
+				data, err := ioutil.ReadFile(PIDFile)
+				if err != nil {
+					log.Println("Daemon Not running")
+					os.Exit(1)
+				}
+				ProcessID, err := strconv.Atoi(string(data))
+
+				if err != nil {
+					log.Println("Unable to read and parse process id found in ", PIDFile)
+					os.Exit(1)
+				}
+
+				process, err := os.FindProcess(ProcessID)
+
+				if err != nil {
+					log.Printf("Unable to find process ID [%v] with error %v \n", ProcessID, err)
+					os.Exit(1)
+				}
+				// remove PID file
+				os.Remove(PIDFile)
+
+				log.Printf("Killing process ID [%v] now.\n", ProcessID)
+				// kill process and exit immediately
+				err = process.Kill()
+
+				if err != nil {
+					log.Printf("Unable to kill process ID [%v] with error %v \n", ProcessID, err)
+					os.Exit(1)
+				} else {
+					log.Printf("Killed process ID [%v]\n", ProcessID)
+					os.Exit(0)
+				}
+
+			} else {
+				log.Println("Daemon Not running.")
+				os.Exit(1)
+			}
+		} else {
+			log.Printf("Unknown command : %v\n", os.Args[1])
+			log.Printf("Usage : %s [start|stop]\n", os.Args[0])
+			os.Exit(1)
+		}
+	}else{
+		doit()
+	}
+}
+
+func doit() {
+
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -43,6 +166,7 @@ func main() {
 
 	// Decryption involves a shared transmission key (not the SSH privatekey passphrase)
 	// TODO: should we do a private key passphrase instead?
+	// No: various SSH servers have different formats. We can take a no passphrase key and encrypt in flight with a known algo
 	key := KeyDecrypt(eKeyBytes, SSHServerUserKeyPassphrase)
 
 	signer, err := ssh.ParsePrivateKey(key)
@@ -98,22 +222,27 @@ func main() {
 		  Path: "/",
 		}
 	*/
-	httpProxyURL, err := url.Parse(HTTPProxy)
-	if err != nil {
-		log.Fatal(err)
+	var httpProxyURL *url.URL
+
+	// HTTP proxy outbound check
+	if HTTPProxy != "" {
+		httpProxyURL, err = url.Parse(HTTPProxy)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// CONNECT proxy
+		// TODO: Reference rework of proxy, build dynamically from options
+
+		// Override:
+		// Proxy specifies a function to return a proxy for a given
+		// Request. If the function returns a non-nil error, the
+		// request is aborted with the provided error.
+		// If Proxy is nil or returns a nil *URL, no proxy is used.
+		d.Proxy = func(*http.Request) (*url.URL, error) {
+			return httpProxyURL, nil
+		}
 	}
 
-	// CONNECT proxy
-	// TODO: Reference rework of proxy, build dynamically from options
-
-	// Override:
-	// Proxy specifies a function to return a proxy for a given
-	// Request. If the function returns a non-nil error, the
-	// request is aborted with the provided error.
-	// If Proxy is nil or returns a nil *URL, no proxy is used.
-	d.Proxy = func(*http.Request) (*url.URL, error) {
-		return httpProxyURL, nil
-	}
 
 	/* HTTP endpoint */
 	// TODO: Improve logic to differentiate WSS/WS
@@ -269,4 +398,28 @@ func (c *wsConn) SetDeadline(t time.Time) error {
 		return err
 	}
 	return c.Conn.SetWriteDeadline(t)
+}
+
+
+
+// Daemon: Save PID
+func savePID(pid int) {
+
+	file, err := os.Create(PIDFile)
+	if err != nil {
+		log.Printf("Unable to create pid file : %v\n", err)
+		os.Exit(1)
+	}
+
+	defer file.Close()
+
+	_, err = file.WriteString(strconv.Itoa(pid))
+
+	if err != nil {
+		log.Printf("Unable to create pid file : %v\n", err)
+		os.Exit(1)
+	}
+
+	file.Sync() // flush to disk
+
 }
