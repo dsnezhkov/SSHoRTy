@@ -59,6 +59,9 @@ func main() {
 
 	encoded := base64.StdEncoding.EncodeToString([]byte(ciphertext))
 	fmt.Println("Base64 encoded ciphertext (B64): ", encoded)
+
+	// TODO: The base64 encoded verstion has to be saved to file. This is what we need to host/pass to impkant
+
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		fmt.Println("Base64 decode error:", err)

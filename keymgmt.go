@@ -7,22 +7,6 @@ import (
 	"encoding/hex"
 )
 
-/*
-func publicKeyFile(file string) ssh.AuthMethod {
-	buffer, err := ioutil.ReadFile(file)
-	if err != nil {
-		log.Fatalln(fmt.Sprintf("Cannot read SSH public key file %s", file))
-		return nil
-	}
-
-	key, err := ssh.ParsePrivateKey(buffer)
-	if err != nil {
-		log.Fatalln(fmt.Sprintf("Cannot parse SSH public key file %s", file))
-		return nil
-	}
-	return ssh.PublicKeys(key)
-}*/
-
 // Decrypts an AES blob by applying a hash of a passphrase,
 // Returns decrypted array of bytes
 func KeyDecrypt(data []byte, passphrase string) []byte {

@@ -6,6 +6,7 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -26,15 +27,13 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var PIDFile = "/tmp/shrt.pid"
-
 func main() {
 
 	if len(os.Args) != 2 {
 		fmt.Printf("Can also do: %s [start|stop] but OK... \n ", os.Args[0])
 	}
 
-	if LogFile != ""  {
+	if LogFile != "" {
 		flog, err := os.OpenFile(LogFile,
 			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -45,8 +44,7 @@ func main() {
 		log.SetOutput(flog)
 	}
 
-
-	if Daemonize == "true" {
+	if Daemonize == strings.ToLower("yes") {
 
 		if len(os.Args) == 1 || strings.ToLower(os.Args[1]) == "start" {
 
@@ -139,39 +137,73 @@ func main() {
 			log.Printf("Usage : %s [start|stop]\n", os.Args[0])
 			os.Exit(1)
 		}
-	}else{
+	} else {
 		doit()
 	}
 }
 
-func doit() {
-
-
-	runtime.GOMAXPROCS(runtime.NumCPU())
+func getSSHKeyHTTP() ([]byte, error) {
 
 	// Fetch SSH private key from external server
 	// TODO: Implement backoff: https://github.com/jpillora/backoff
 	resp, err := http.Get(SSHServerUserKeyUrl)
 	if err != nil {
-		log.Println("Key Server not accessible")
-		os.Exit(1)
+		log.Println("Key Server not accessible or file not found")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	eKeyBytes, err := ioutil.ReadAll(resp.Body)
+	eKeyBytesA, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("Key Server response not understood")
-		os.Exit(2) // TODO: Should not exit, instead try to remediate within backoff
+		return nil, err // TODO: Should not exit, instead try to remediate within backoff or return error
 	}
 
+	eKeyBytes, err := b64ToBytes(string(eKeyBytesA[:]))
+	if err != nil {
+		log.Println("Base64 decode error:", err)
+		return nil, err
+	}
+	return eKeyBytes, nil
+}
+
+func b64ToBytes(b64 string) ([]byte, error) {
+	// Local unwrap
+	eKeyBytes, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		log.Println("Base64 decode error:", err)
+		return nil, err
+	}
+	return eKeyBytes, nil
+}
+func doit() {
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	var (
+		eKeyBytes []byte
+		err       error
+	)
+
+	if SSHServerUserKey != "" {
+		eKeyBytes, err = b64ToBytes(SSHServerUserKey)
+	} else {
+		// Remote fetch
+		eKeyBytes, err = getSSHKeyHTTP()
+		if err != nil {
+			log.Println("Unable to proceed as SSH key not fetched")
+		}
+	}
 	// Decryption involves a shared transmission key (not the SSH privatekey passphrase)
-	// TODO: should we do a private key passphrase instead?
-	// No: various SSH servers have different formats. We can take a no passphrase key and encrypt in flight with a known algo
+	// Note:
+	// Various SSH servers have different formats for SSH keys. They also change at will.
+	// To avoid variations in (armored) SSH key, we generate our own pure RSA key irrespective of the
+	// destination SSH server, with a passphrase. This is a passphrase to unwrap the key.
 	key := KeyDecrypt(eKeyBytes, SSHServerUserKeyPassphrase)
 
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		// TODO: attempt to remedy with brckoff
+		// TODO: attempt to remedy with backoff
 		log.Fatalf("Unable to parse private key: %v", err)
 	}
 
@@ -201,48 +233,40 @@ func doit() {
 		TLSClientConfig:  &tlsClient,
 	}
 	// Dialer options. Experimental, set by flag
+	// TODO: config variable
 	d.EnableCompression = true
 
-	// TODO: Introduce logic if proxy is used.
-	// TODO: Introduce proxy options:
-	// a. `http.ProxyFromEnvironment`
-	// b. build the websocket dialer with proxy information like credentials:
-	/*
-		proxyURL, _ := url.Parse("http://proxy-ip:proxy-port")
-		proxyURL.User = url.UserPassword("proxy-username", "proxy-password")
-
-		dialer := websocket.Dialer{
-			Proxy: http.ProxyURL(proxyURL),
-		}
-
-
-		Proxy: http.ProxyURL(&url.URL{
-		  Scheme: "http", // or "https" depending on your proxy
-		  Host: "ipaddress:port" ,
-		  Path: "/",
-		}
-	*/
 	var httpProxyURL *url.URL
 
-	// HTTP proxy outbound check
-	if HTTPProxy != "" {
-		httpProxyURL, err = url.Parse(HTTPProxy)
-		if err != nil {
-			log.Fatal(err)
-		}
-		// CONNECT proxy
-		// TODO: Reference rework of proxy, build dynamically from options
+	// TODO: Introduce proxy options:
+	// build the websocket dialer with proxy information like credentials
 
-		// Override:
+	// q. Use known HTTP proxy outbound
+	if HTTPProxy != "" {
+
 		// Proxy specifies a function to return a proxy for a given
 		// Request. If the function returns a non-nil error, the
 		// request is aborted with the provided error.
 		// If Proxy is nil or returns a nil *URL, no proxy is used.
 		d.Proxy = func(*http.Request) (*url.URL, error) {
+
+			httpProxyURL, err = url.Parse(HTTPProxy)
+			if err != nil {
+				return nil, err
+			}
+
+			if  HTTPProxyAuthUser != ""  && HTTPProxyAuthPass != ""{
+				httpProxyURL.User = url.UserPassword(HTTPProxyAuthUser, HTTPProxyAuthPass)
+			}
 			return httpProxyURL, nil
 		}
 	}
 
+	// b. Get proxy from environment
+	if HTTPProxyFromEnvironment == strings.ToLower("yes") {
+		log.Println("Environment proxy set")
+		d.Proxy= http.ProxyFromEnvironment
+	}
 
 	/* HTTP endpoint */
 	// TODO: Improve logic to differentiate WSS/WS
@@ -273,7 +297,7 @@ func doit() {
 	wssReq.Form = data
 
 	// Setup headers
-	wssReq.Header.Set("User-Agent", "Mozilla")
+	wssReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X x.y; rv:42.0) Gecko/20100101 Firefox/42.0")
 
 	// TODO: test auth: https://github.com/gorilla/websocket/blob/master/client_server_test.go
 	wsConn, resp, err := d.Dial(wssReqURL, wssReq.Header)
@@ -399,8 +423,6 @@ func (c *wsConn) SetDeadline(t time.Time) error {
 	}
 	return c.Conn.SetWriteDeadline(t)
 }
-
-
 
 // Daemon: Save PID
 func savePID(pid int) {

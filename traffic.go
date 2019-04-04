@@ -126,7 +126,7 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 		var shell string
 		shell = os.Getenv("SHELL")
 		if shell == "" {
-			shell = "/bin/sh" // Default
+			shell = SSHShell // Default
 		}
 
 		// Sessions have out-of-band requests such as "exec", "shell", "pty-req" and "env"

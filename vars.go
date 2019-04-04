@@ -19,18 +19,24 @@ var (
 	localHost string //local host
 	localPort string //local port
 
+	SSHShell           string // Default Shell
 	SSHRemoteSocksHost string //SOCKS host
 	SSHRemoteSocksPort string //SOCKS port
 
-	SSHServerUserKeyUrl        string // Where encrypted RSA key for SSH tunnel lives
+	SSHServerUserKey           string // Encrypted RSA key for SSH tunnel. Embedded unwrap
+	SSHServerUserKeyUrl        string // Where encrypted RSA key for SSH tunnel lives. Remote unwrap
 	SSHServerUserKeyPassphrase string // decryption key for ^^
 
-	HTTPProxy    string // HTTP Proxy
-	HTTPEndpoint string // HTTP Endpoint
-	WSEndpoint   string // WS/S Endpoint
+	HTTPProxy                           string // HTTP Proxy
+	HTTPProxyFromEnvironment            string // HTTP Proxy
+	HTTPProxyAuthUser    string // HTTP Proxy User
+	HTTPProxyAuthPass    string // HTTP Proxy Pass
+	HTTPEndpoint         string // HTTP Endpoint
+	WSEndpoint           string // WS/S Endpoint
 
 	LogFile    string
 	Daemonize  string
+	PIDFile    string
 )
 
 // local service to be forwarded
