@@ -16,7 +16,7 @@ ssh-keygen -b 2048 -t rsa -N "" -C ${AGENTID} -f ${DKEYS}/${AGENTID}
 
 echo "[+] Creating ${AGENTID} OS account"
 AHOME="/tmp/${AGENTID}"
-useradd -b /tmp -c ${AGENTID} -d  ${AHOME} -m -N -s /bin/sh ${AGENTID} \
+useradd -b /tmp -c ${AGENTID} -d  ${AHOME} -m -N -s /bin/false ${AGENTID} \
         -p $(dd if=/dev/urandom bs=1024 count=1 status=none | shasum | cut -c 1-31)
 
 if [[ -d ${AHOME} ]]
