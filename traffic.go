@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/kr/pty"
-	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
 	"log"
@@ -13,6 +10,12 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
+
+	"github.com/kr/pty"
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
+	"github.com/gorilla/websocket"
 )
 
 // Listens for SSH connection
@@ -21,16 +24,16 @@ func listenConnection(client net.Conn, config *ssh.ServerConfig) {
 	// Before use, a handshake must be performed on the incoming net.Conn.
 	sshConn, chans, reqs, err := ssh.NewServerConn(client, config)
 	if err != nil {
-		log.Printf("Failed to handshake (%s)", err)
+		log.Printf("SSH: Failed to handshake (%s)", err)
 		return
 	}
 
-	log.Printf("New SSH connection from %s (%s)", sshConn.RemoteAddr(), sshConn.ClientVersion())
+	log.Printf("SSH: New connection from %s (%s)", sshConn.RemoteAddr(), sshConn.ClientVersion())
 
 	// Discard all irrelevant incoming request but serve the one you really need to care.
 	// DiscardRequests consumes and rejects all requests from the
 	// passed-in channel.
-
+	// TODO: why we need this?
 	//       go ssh.DiscardRequests(reqs)
 	go handleRequests(reqs)
 	// Accept all channels
@@ -43,21 +46,21 @@ func listenSConnection(SClientConn net.Conn) {
 }
 
 func acceptLoop(listener net.Listener, config *ssh.ServerConfig) {
-	log.Printf("Listener: %s\n", listener.Addr().String())
+	log.Printf("SSH: SSH Port Listener: %s\n", listener.Addr().String())
 	defer listener.Close()
 	for {
 		clientConn, err := listener.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("New connection found on %s\n", listener.Addr().String())
+		log.Printf("SSH: New connection found on %s\n", listener.Addr().String())
 		go listenConnection(clientConn, config)
 	}
 }
 
 func acceptSLoop(listener net.Listener) {
 
-	log.Printf("Listener: %s\n", listener.Addr().String())
+	log.Printf("SSH: SOCKS Listener: %s\n", listener.Addr().String())
 	defer listener.Close()
 	for {
 		clientConn, err := listener.Accept()
@@ -65,19 +68,19 @@ func acceptSLoop(listener net.Listener) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("New connection found on %s\n", listener.Addr().String())
+		log.Printf("SSH: SOCKS: New connection found on %s\n", listener.Addr().String())
 
 		go listenSConnection(clientConn)
 	}
 
-	log.Println("waiting for all existing connections to finish")
+	log.Println("SSH: waiting for all existing connections to finish")
 	connections.Wait()
-	log.Println("shutting down")
+	log.Println("SSH: shutting down")
 }
 
 func handleRequests(reqs <-chan *ssh.Request) {
 	for req := range reqs {
-		log.Printf("recieved out-of-band request: %+v", req)
+		log.Printf("SSH: received out-of-band request: %+v", req)
 	}
 }
 
@@ -97,6 +100,7 @@ func PtyRun(c *exec.Cmd, tty *os.File) (err error) {
 }
 
 func handleChannels(chans <-chan ssh.NewChannel) {
+
 	// Service the incoming Channel channel.
 	for newChannel := range chans {
 		// Channels have a type, depending on the application level
@@ -105,36 +109,38 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 		// terminal interface.
 		// TODO: other types of channels (x11, forwarded-tcp, direct-tcp) may need to be handled here
 		if t := newChannel.ChannelType(); t != "session" {
-			newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", t))
+			newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("SSH: unknown channel type: %s", t))
 			continue
 		}
 		channel, requests, err := newChannel.Accept()
 		if err != nil {
-			log.Printf("could not accept channel (%s)", err)
+			log.Printf("SSH: could not accept channel (%s)", err)
 			continue
 		}
 
 		// allocate a terminal for this channel
-		log.Print("creating pty...")
+		log.Print("SSH: creating pty...")
 		// Create new pty
 		f, tty, err := pty.Open()
 		if err != nil {
-			log.Printf("could not start pty (%s)", err)
+			log.Printf("SSH: could not start pty (%s)", err)
 			continue
 		}
 
 		var shell string
 		shell = os.Getenv("SHELL")
 		if shell == "" {
-			shell = SSHShell // Default
+			shell = SSHShell // Take defaults
 		}
 
 		// Sessions have out-of-band requests such as "exec", "shell", "pty-req" and "env"
 		go func(in <-chan *ssh.Request) {
 			for req := range in {
+
 				// log.Printf("%v %s", req.Payload, req.Payload)
 				ok := false
 				switch req.Type {
+
 				case "exec":
 					ok = true
 					command := string(req.Payload[4 : req.Payload[3]+4])
@@ -142,7 +148,7 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 					// Start Command via shell
 					// TODO: maybe without shell?
 					cmd := exec.Command(shell, []string{"-c", command}...)
-					log.Printf("cmd to exec: %s\n", command)
+					log.Printf("SSH: cmd to exec: %s\n", command)
 
 					cmd.Stdout = channel
 					cmd.Stderr = channel
@@ -150,7 +156,7 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 
 					err := cmd.Start()
 					if err != nil {
-						log.Printf("could not start command (%s)", err)
+						log.Printf("SSH: could not start command (%s)", err)
 						continue
 					}
 
@@ -158,48 +164,51 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 					go func() {
 						_, err := cmd.Process.Wait()
 						if err != nil {
-							log.Printf("failed to exit bash (%s)", err)
+							log.Printf("SSH: failed to exit bash (%s)", err)
 						}
 						channel.Close()
-						log.Printf("session closed")
+						log.Printf("SSH: session closed")
 					}()
+
 				case "shell":
 					// TODO: parameterize shell and TERM
 					cmd := exec.Command(shell)
-					cmd.Env = []string{"TERM=xterm"} // is this a common default?
+					cmd.Env = []string{"TERM=" + SSHEnvTerm}
 					err := PtyRun(cmd, tty)
 					if err != nil {
-						log.Printf("%s", err)
+						log.Printf("SSH: Error Pty: %s", err)
 					}
 
 					// Teardown session
 					var once sync.Once
 					closeCh := func() {
 						channel.Close()
-						log.Printf("session closed")
+						log.Printf("SSH: session closed")
 					}
 
 					//pipe session to bash and visa-versa
 					go func() {
 						_, err := io.Copy(channel, f)
 						if err != nil {
-							log.Println(fmt.Sprintf("error copy bash -> remote : %s", err))
+							log.Println(fmt.Sprintf("SSH: error copy BLUE SHELL -> RED remote : %s", err))
 						}
 						once.Do(closeCh)
 					}()
 					go func() {
 						_, err := io.Copy(f, channel)
 						if err != nil {
-							log.Println(fmt.Sprintf("error copy remote -> bash: %s", err))
+							log.Println(fmt.Sprintf("error copy RED remote -> BLUE SHELL: %s", err))
 						}
 						once.Do(closeCh)
 					}()
 
 					// We don't accept any commands (Payload),
 					// only the default shell.
+					// TODO: What is this and do we need it?
 					if len(req.Payload) == 0 {
 						ok = true
 					}
+
 				case "pty-req":
 					// Responding 'ok' here will let the client
 					// know we have a pty ready for input
@@ -209,13 +218,15 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 					termEnv := string(req.Payload[4 : termLen+4])
 					w, h := parseDims(req.Payload[termLen+4:])
 					SetWinsize(f.Fd(), w, h)
-					log.Printf("pty-req '%s'", termEnv)
+					log.Printf("SSH: pty-req '%s'", termEnv)
+
 				case "window-change":
 					w, h := parseDims(req.Payload)
 					SetWinsize(f.Fd(), w, h)
 					continue //no response
+
 				case "subsystem":
-					log.Printf("Subsystem: %s\n", req.Payload[4:])
+					log.Printf("SSH: Subsystem wanted: %s\n", req.Payload[4:])
 					subsystemId := string(req.Payload[4:])
 					if subsystemId == "sftp" {
 
@@ -229,13 +240,13 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 							serverOptions...,
 						)
 						if err != nil {
-							log.Fatal(err)
+							log.Println("SSH: SFTP error", err)
 						}
 						if err := server.Serve(); err == io.EOF {
 							server.Close()
-							log.Print("sftp client exited session.")
+							log.Println("SSH: SFTP client exited session.")
 						} else if err != nil {
-							log.Fatal("sftp server completed with error:", err)
+							log.Println("SSH: SFTP server completed with error:", err)
 						}
 
 						ok = true
@@ -246,11 +257,71 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 				}
 
 				if !ok {
-					log.Printf("declining %s request...", req.Type)
+					log.Printf("SSH: declining %s request...", req.Type)
 				}
 
 				req.Reply(ok, nil)
 			}
 		}(requests)
 	}
+}
+
+// In order to comply websocket to net.Conn interface it needs to implement Read/Write
+// TODO: Refactor
+func NewWebSocketConn(websocketConn *websocket.Conn) net.Conn {
+	c := wsConn{
+		Conn: websocketConn,
+	}
+	return &c
+}
+
+//Read is not threadsafe though thats okay since there
+//should never be more than one reader
+func (c *wsConn) Read(dst []byte) (int, error) {
+	ldst := len(dst)
+	//use buffer or read new message
+	var src []byte
+	if l := len(c.buff); l > 0 {
+		src = c.buff
+		c.buff = nil
+	} else {
+		t, msg, err := c.Conn.ReadMessage()
+		if err != nil {
+			return 0, err
+		} else if t != websocket.BinaryMessage {
+			log.Printf("<WARNING> non-binary msg")
+		}
+		src = msg
+	}
+	//copy src->dest
+	var n int
+	if len(src) > ldst {
+		//copy as much as possible of src into dst
+		n = copy(dst, src[:ldst])
+		//copy remainder into buffer
+		r := src[ldst:]
+		lr := len(r)
+		c.buff = make([]byte, lr)
+		copy(c.buff, r)
+	} else {
+		//copy all of src into dst
+		n = copy(dst, src)
+	}
+	//return bytes copied
+	return n, nil
+}
+
+func (c *wsConn) Write(b []byte) (int, error) {
+	if err := c.Conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
+		return 0, err
+	}
+	n := len(b)
+	return n, nil
+}
+
+func (c *wsConn) SetDeadline(t time.Time) error {
+	if err := c.Conn.SetReadDeadline(t); err != nil {
+		return err
+	}
+	return c.Conn.SetWriteDeadline(t)
 }

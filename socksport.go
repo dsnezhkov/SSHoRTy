@@ -9,6 +9,7 @@ import (
 	"sync"
 )
 
+// handleSConn handles the SOCKS on the reverse tunnel end
 func handleSConn(local net.Conn) {
 	connections.Add(1)
 	defer local.Close()
@@ -21,7 +22,7 @@ func handleSConn(local net.Conn) {
 	// read from local SOCKS
 	n, err := local.Read(buf)
 	if err != nil || n < 2 {
-		log.Printf("[%s] unable to read SOCKS header: %v", local.RemoteAddr(), err)
+		log.Printf("SOCKS: [%s] unable to read SOCKS header: %v", local.RemoteAddr(), err)
 		return
 	}
 	buf = buf[:n]
@@ -44,20 +45,20 @@ func handleSConn(local net.Conn) {
 			buf := buf[8:]
 			i := bytes.Index(buf, []byte{0})
 			if i < 0 {
-				log.Printf("[%s] unable to locate SOCKS4 user", local.RemoteAddr())
+				log.Printf("SOCKS: [%s] unable to locate SOCKS4 user", local.RemoteAddr())
 				return
 			}
 
 			// is there a user
 			user := buf[:i]
-			log.Printf("[%s] incoming SOCKS4 TCP/IP stream connection, user=%q, raddr=%s", local.RemoteAddr(), user, addr)
+			log.Printf("SOCKS: [%s] incoming SOCKS4 TCP/IP stream connection, user=%q, raddr=%s", local.RemoteAddr(), user, addr)
 
 			// dial from local SOCKS to remote (requested  proxied) address over SSH tunnel
-			log.Printf("S:dial %s %s", local.RemoteAddr(), local.LocalAddr())
+			log.Printf("SOCKS: dial %s <- %s", local.RemoteAddr(), local.LocalAddr())
 			//remote, err := dialer.DialTCP("tcp4", local.RemoteAddr().(*net.TCPAddr), addr)
 			remote, err := net.Dial("tcp4", addr.String())
 			if err != nil {
-				log.Printf("[%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
+				log.Printf("SOCKS: [%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
 				local.Write([]byte{0, 0x5b, 0, 0, 0, 0, 0, 0})
 				return
 			}
@@ -66,13 +67,13 @@ func handleSConn(local net.Conn) {
 			// transfer bytes from local SOCKS to remote proxied desired endpoint
 			transfer(local, remote)
 		default:
-			log.Printf("[%s] unsupported command, closing connection", local.RemoteAddr())
+			log.Printf("SOCKS: [%s] unsupported command, closing connection", local.RemoteAddr())
 		}
 	case 5:
 		authlen, buf := buf[1], buf[2:]
 		auths, buf := buf[:authlen], buf[authlen:]
 		if !bytes.Contains(auths, []byte{0}) {
-			log.Printf("[%s] unsuported SOCKS5 authentication method", local.RemoteAddr())
+			log.Printf("SOCKS: [%s] unsuported SOCKS5 authentication method", local.RemoteAddr())
 			local.Write([]byte{0x05, 0xff})
 			return
 		}
@@ -80,7 +81,7 @@ func handleSConn(local net.Conn) {
 		buf = make([]byte, 256)
 		n, err := local.Read(buf)
 		if err != nil {
-			log.Printf("[%s] unable to read SOCKS header: %v", local.RemoteAddr(), err)
+			log.Printf("SOCKS: [%s] unable to read SOCKS header: %v", local.RemoteAddr(), err)
 			return
 		}
 		buf = buf[:n]
@@ -92,18 +93,18 @@ func handleSConn(local net.Conn) {
 				switch addrtype := buf[0]; addrtype {
 				case 1:
 					if len(buf) < 8 {
-						log.Printf("[%s] corrupt SOCKS5 TCP/IP stream connection request", local.RemoteAddr())
+						log.Printf("SOCKS: [%s] corrupt SOCKS5 TCP/IP stream connection request", local.RemoteAddr())
 						local.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 						return
 					}
 					ip := net.IP(buf[1:5])
 					port := binary.BigEndian.Uint16(buf[5:6])
 					addr := &net.TCPAddr{IP: ip, Port: int(port)}
-					log.Printf("[%s] incoming SOCKS5 TCP/IP stream connection, raddr=%s", local.RemoteAddr(), addr)
+					log.Printf("SOCKS: [%s] incoming SOCKS5 TCP/IP stream connection, raddr=%s", local.RemoteAddr(), addr)
 					// remote, err := dialer.DialTCP("tcp", local.RemoteAddr().(*net.TCPAddr), addr)
 					remote, err := net.Dial("tcp4", addr.String())
 					if err != nil {
-						log.Printf("[%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
+						log.Printf("SOCKS: [%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
 						local.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 						return
 					}
@@ -114,7 +115,7 @@ func handleSConn(local net.Conn) {
 					name, buf := buf[:addrlen], buf[addrlen:]
 					ip, err := net.ResolveIPAddr("ip", string(name))
 					if err != nil {
-						log.Printf("[%s] unable to resolve IP address: %q, %v", local.RemoteAddr(), name, err)
+						log.Printf("SOCKS: [%s] unable to resolve IP address: %q, %v", local.RemoteAddr(), name, err)
 						local.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 						return
 					}
@@ -123,7 +124,7 @@ func handleSConn(local net.Conn) {
 					// remote, err := dialer.DialTCP("tcp", local.RemoteAddr().(*net.TCPAddr), addr)
 					remote, err := net.Dial("tcp4", addr.String())
 					if err != nil {
-						log.Printf("[%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
+						log.Printf("SOCKS: [%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
 						local.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 						return
 					}
@@ -131,23 +132,25 @@ func handleSConn(local net.Conn) {
 					transfer(local, remote)
 
 				default:
-					log.Printf("[%s] unsupported SOCKS5 address type: %d", local.RemoteAddr(), addrtype)
+					log.Printf("SOCKS: [%s] unsupported SOCKS5 address type: %d", local.RemoteAddr(), addrtype)
 					local.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 				}
 			default:
-				log.Printf("[%s] unknown SOCKS5 command: %d", local.RemoteAddr(), command)
+				log.Printf("SOCKS: [%s] unknown SOCKS5 command: %d", local.RemoteAddr(), command)
 				local.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 			}
 		default:
-			log.Printf("[%s] unnknown version after SOCKS5 handshake: %d", local.RemoteAddr(), version)
+			log.Printf("SOCKS: [%s] unnknown version after SOCKS5 handshake: %d", local.RemoteAddr(), version)
 			local.Write([]byte{0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		}
 	default:
-		log.Printf("[%s] unknown SOCKS version: %d", local.RemoteAddr(), version)
+		log.Printf("SOCKS: [%s] unknown SOCKS version: %d", local.RemoteAddr(), version)
 	}
 }
 
-// in - local SOCKS conn, out - remote desired endpoint
+// transfer tranfers bytes
+// in - local SOCKS conn (Red)
+// out - remote desired endpoint (Blue)
 func transfer(in, out net.Conn) {
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
@@ -155,11 +158,13 @@ func transfer(in, out net.Conn) {
 
 		// copy bytes verbatim
 		n, err := io.Copy(out, in)
-		log.Printf("xfer done: in=%v\tout=%v\ttransfered=%d\terr=%v", in.RemoteAddr(), out.RemoteAddr(), n, err)
+		log.Printf("SOCKS: xfer done: in=%v\tout=%v\ttransfered=%d\terr=%v", in.RemoteAddr(), out.RemoteAddr(), n, err)
+
 		// close write side on local SOCKS
 		if conn, ok := in.(*net.TCPConn); ok {
 			conn.CloseWrite()
 		}
+
 		// close read side to remote endpoint
 		if conn, ok := out.(*net.TCPConn); ok {
 			conn.CloseRead()

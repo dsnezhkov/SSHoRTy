@@ -24,8 +24,9 @@ type Winsize struct {
 
 // SetWinsize sets the size of the given pty.
 func SetWinsize(fd uintptr, w, h uint32) {
-	log.Printf("window resize %dx%d", w, h)
+	log.Printf("Pty: window resize %dx%d", w, h)
 	ws := &Winsize{Width: uint16(w), Height: uint16(h)}
-	syscall.Syscall(syscall.SYS_IOCTL, fd, uintptr(syscall.TIOCSWINSZ), uintptr(unsafe.Pointer(ws)))
+	syscall.Syscall(
+			syscall.SYS_IOCTL, fd,
+			uintptr(syscall.TIOCSWINSZ), uintptr(unsafe.Pointer(ws)))
 }
-

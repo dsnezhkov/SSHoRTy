@@ -5,7 +5,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Types
+// Implant Types
 
 // Endpoint: address:port
 type Endpoint struct {

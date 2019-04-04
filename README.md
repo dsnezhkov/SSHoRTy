@@ -77,6 +77,10 @@ Local SSH tunnel to proxy host in the background
 ``` 
 ssh  -N -f -q  -L 127.0.0.1:1080:127.0.0.1:1080 root@167.99.88.24
 ``` 
+
+```bash
+/usr/bin/htpasswd -v  /etc/squid/passwords  companyuser
+```
 ## Code used
 Thanks to ref: 
 - https://gist.github.com/codref/473351a24a3ef90162cf10857fac0ff3
