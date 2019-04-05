@@ -76,6 +76,8 @@ SSHServerPort=222
 
 # OS account with the private key the implant has to connect to the SSH server with
 # see gen_ssh_user.sh
+# TODO: Randomize the user
+
 SSHServerUser=4fa48c653682c3b04add14f434a3114
 
 # Implant ID

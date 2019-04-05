@@ -38,7 +38,7 @@ printf "%s\n\n" "------------------------------------"
 echo "[*] Building Keys For ${ImplantID} "
 
 go run ${TOOL_DIR}/keygen.go \
-       -bits 4096  -pass ${SSHServerUserKeyPassphrase} \
+       -bits ${SSHServerUserKeyBits}  -pass ${SSHServerUserKeyPassphrase} \
        -pkfile ${SSHServerUserKeyFile}.pk \
        -pkfile-b64 ${SSHServerUserKeyFile}.bpk \
        -pubfile ${SSHServerUserKeyFile}.pub
@@ -138,6 +138,13 @@ cat<<END | tee ${OUT_DIR}/${ImplantID}.info
 END
 
 printf "%s\n\n" "-------------- END INFO----------------"
+echo "[*] Packaging ${ImplantID} for infrastructure deployment "
+
+# pushd/popd not always available
+cd  ${OUT_DIR}
+tar -cvzf ${ImplantID}.tar.gz ./${ImplantID}.{pk,bpk,pub}
+cd -
+
 printf "\n\n%s\n\n" "**********************************************"
 echo "Based on your build profile you can expect the following Deployment Plan"
 printf "%s\n\n" "**********************************************"
@@ -149,7 +156,9 @@ A. If you have chosen to fetch armored SSH key from external Yellow/Red hosting,
 
 B.You will need to create user ${SSHServerUser} on SSH server where you want Implant to terminate the reverse tunnel on Red network. Refer to scripts in infra directory. SSH keys for the would be user are pregenerated:  ${SSHServerUserKeyFile}.pk and  ${SSHServerUserKeyFile}.pub. You need to place them in .ssh directory as per usual SSH access setup (mind the permissions on keys and .ssh directory)
 
-C. You will need to stand up an WSS unwrap service on Yellow/Red side. Refer to scripts in infra directory or documentation.
+ A/B Note: For your convenience we have created a package ${OUT_DIR}/${ImplantID}.tar.gz containing SSH Keys (${ImplantID}.{pk,bpk,pub}). You can use tools/install_implant.sh to automate the steps.
+
+C. You will need to stand up an WSS unwrap service on Yellow/Red side. Refer to infra/wss2ssh_tun.sh script to help you with that.
 END
 
 printf "\n%s\n" "### PHASE III: Blue Detonation and Connect back ###"
