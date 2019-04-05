@@ -195,8 +195,6 @@ func doit() {
 			log.Println("Implant: Unable to proceed as SSH key not fetched")
 		}
 	}
-	// Decryption involves a shared transmission key (not the SSH privatekey passphrase)
-	// Note:
 	// Various SSH servers have different formats for SSH keys. They also change at will.
 	// To avoid variations in (armored) SSH key, we generate our own pure RSA key irrespective of the
 	// destination SSH server, with a passphrase. This is a passphrase to unwrap the key.
