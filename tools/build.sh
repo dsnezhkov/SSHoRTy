@@ -89,13 +89,14 @@ then
 printf "\n\n%s\n\n" "**********************************************"
 echo "Implant: ${DropperName} ($(stat -f '%z bytes' ${OUT_DIR}/${DropperName})) Generated"
 echo "!!! Here is the info on Implant configuraton !!!"
-echo "!!! Record the info somewhere safe !!!"
-echo "!!! This info is mostly embedded in the Implant. !!!"
-echo "!!! Again, save it, or you will need to regenerate the implant.!!!"
+echo "!!! Record the info somewhere safe and we have saved a copy here !!!"
+echo "!!!     Implant Info: ${OUT_DIR}/${ImplantID}.info               !!!"
+echo "!!! This info is mostly embedded in the Implant.                 !!!"
+echo "!!! Again, save it, or you will need to regenerate the implant.  !!!"
 printf "%s\n\n" "**********************************************"
 
 printf "%s\n\n" "-------------- START INFO--------------"
-cat<<END
+cat<<END | tee ${OUT_DIR}/${ImplantID}.info
 (Blue) Implant Egress HTTP Proxy Info
     +HTTP Proxy:(from env?) ${HTTPProxyFromEnvironment}
      HTTP Proxy: ${HTTPProxy}
