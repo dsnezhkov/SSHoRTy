@@ -217,6 +217,9 @@ ssh  -N -f -q  -L 127.0.0.1:1080:127.0.0.1:1080 root@167.99.88.24
 ```
 ## Code used
 Thanks to ref: 
+- https://golang-basic.blogspot.com/2014/06/step-by-step-guide-to-ssh-using-go.html
+- https://sourcegraph.com/github.com/golang/crypto@38d8ce5564a5b71b2e3a00553993f1b9a7ae852f/-/blob/ssh/example_test.go?utm_source=share#L52
+- https://gist.github.com/jpillora/b480fde82bff51a06238
 - https://gist.github.com/codref/473351a24a3ef90162cf10857fac0ff3
 -	 https://gist.github.com/pavel-odintsov/0208f1848952d4940b4a5976165db17f
 -	 https://github.com/creack/termios/blob/master/win/win.go

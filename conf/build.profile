@@ -139,7 +139,7 @@ SSHEnvTerm="xterm"
 
 # Intercepting Proxy (Burp)
 # export http_proxy="http://127.0.0.1:8088"
-HTTPProxyFromEnvironment="yes"
+HTTPProxyFromEnvironment="no"
 
 # Egress proxy
 # TODO: HTTP/S proxy

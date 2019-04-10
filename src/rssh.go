@@ -5,6 +5,7 @@
 package main
 
 import (
+	"C"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -25,6 +26,15 @@ import (
 	"github.com/gorilla/websocket"
 	"golang.org/x/crypto/ssh"
 )
+
+// For buildmode shared
+// export as `entry`
+
+//export entry
+func entry() int {
+	main()
+	return 0
+}
 
 func main() {
 

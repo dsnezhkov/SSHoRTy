@@ -58,7 +58,8 @@ then
 	chown ${AGENTID} ${AHOME}/.ssh/${AGENTID}.{pk,pub,bpk} && chmod 600 ${AHOME}/.ssh/${AGENTID}.{pk,pub,bpk}
 
 	echo "[+] Adding PUBLIC Key ${AHOME}/.ssh/${AGENTID} to Agent's Authorized keys file"
-	cat ${AHOME}/.ssh/${AGENTID}.pub >> ${AHOME}/.ssh/authorized_keys 
+	cat ${AHOME}/.ssh/${AGENTID}.pub > ${AHOME}/.ssh/authorized_keys
+	chown ${AGENTID} ${AHOME}/.ssh/authorized_keys
 
 	echo "[+] Currently, content of ${AGENTID} 's HOME: "
 	ls -ld ${AHOME}
