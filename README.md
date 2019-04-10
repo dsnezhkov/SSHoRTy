@@ -5,7 +5,7 @@
 
 ## What is SSHoRTy?
 
-A progressive, customizable standalone reverse SSH shell tunnel and SOCKS proxy implant for Red Teams operating in Linux and MacOS systems. 
+A progressive, customizable standalone reverse SSH shell tunnel and SOCKS proxy implant for Linux and MacOS systems that gets a Red Team operator from :large_blue_circle: to :red_circle:, sometimes with a :smile: and without :cold_sweat:
 
 For detailed guide see Wiki
 
