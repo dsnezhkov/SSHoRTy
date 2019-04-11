@@ -1,6 +1,6 @@
 
 
-<a href="https://www.ibm.com/security/services/offensive-security-services"><img src="https://github.com/dsnezhkov/SSHoRTy/blob/master/generated-images/logo.png" width="30%" align="left"></a>
+<a href="https://www.ibm.com/security/services/offensive-security-services"><img src="https://github.com/dsnezhkov/SSHoRTy/wiki/images/logo.png" width="30%" align="left"></a>
 
 
 ## What is SSHoRTy?
